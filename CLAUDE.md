@@ -59,3 +59,4 @@ They live in the README. Link to them, do not copy them here.
 ## Where things are
 
 - [CODING_STANDARDS.md](CODING_STANDARDS.md): the architecture rule, what may be `public`, and the conventions, plus the shared standards linked from it. Read it before writing code.
+- More on how the features work: the project's folder in the knowledge base (the Obsidian vault), under `references/`. Without the vault (a cloud session, CI), go on without it.
