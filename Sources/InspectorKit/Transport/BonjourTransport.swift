@@ -90,6 +90,10 @@ public struct BonjourTransport: InspectorTransport {
         if try select(app, from: endpoints.map(\.name)) != nil { break }
       }
       try Task.checkCancellation()
+      // PROTOTYPE 07: skip the second-app grace period when `--app` names an instance that is
+      // already present, so a loop step costs the request alone.
+      let exact = app.flatMap { name in latest.first { $0.name == name || $0.name.hasPrefix(name + " @ ") } }
+      if let exact { return exact }
       // A guess at how long a second app on the same network takes to show up; not measured.
       try await Task.sleep(for: .milliseconds(500))
       continuation.finish()
