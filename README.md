@@ -79,9 +79,10 @@ flowchart LR
 ## Project Structure
 
 - `Sources/InspectorKit/` - `Inspector`, the protocol types and the transports
-- `Sources/inspector/` - The CLI
+- `Sources/inspector/` - The CLI, on swift-argument-parser: one file per command in `Commands/`, registered in `InspectorCLI.swift`
 - `Sources/demo-host/` - A fake app on the Mac for manual checks
 - `Tests/InspectorKitTests/` - In-process tests, no sockets
+- `Tests/InspectorCLITests/` - Every command's exact output, run against an in-process app
 - `.claude/skills/inspector/` - The Claude Code skill for driving a running app
 
 ## The CLI
