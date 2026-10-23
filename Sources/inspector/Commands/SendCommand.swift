@@ -37,9 +37,11 @@ struct SendCommand: InspectorCommand {
   }
 
   func answer(in environment: Environment) async throws(InspectorError) -> any Encodable {
+    var payload: JSONValue?
+    if let raw = self.payload.first { payload = try Self.parsePayload(raw, filledFrom: environment) }
     let request = SendRequest(
       path: path,
-      payload: payload.first.map(Self.parsePayload),
+      payload: payload,
       until: condition.match,
       untilTimeoutMs: condition.match == nil ? nil : condition.timeout.timeoutMs)
     let answer = try await environment.answer(to: .send(request), from: options.app)
@@ -52,6 +54,20 @@ struct SendCommand: InspectorCommand {
       code: .expectationFailed,
       message: "the app answered before `\(WireJSON.line(match))` held; it may run an InspectorKit without until",
       detail: WireJSON.line(result.state))
+  }
+
+  /// A payload argument with its `${NAME}` placeholders filled from `.inspector/.env`.
+  ///
+  /// In a payload that is JSON already, the values go into its strings and keys as text, so a
+  /// quote in a value cannot break the JSON; otherwise into the raw text before it is parsed, so
+  /// `${VALUE}` alone can become a number.
+  static func parsePayload(_ raw: String, filledFrom environment: Environment) throws(InspectorError) -> JSONValue {
+    let values = try environment.placeholderValues(in: raw)
+    guard !values.isEmpty else { return parsePayload(raw) }
+    if let json = try? JSONDecoder().decode(JSONValue.self, from: Data(raw.utf8)) {
+      return json.mappingStrings { Placeholders.fill($0, from: values) }
+    }
+    return parsePayload(Placeholders.fill(raw, from: values))
   }
 
   /// A payload argument is JSON if it parses as JSON, otherwise a plain string.
