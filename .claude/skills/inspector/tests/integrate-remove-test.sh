@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # Tests for the skill's integrate.sh and remove.sh against throwaway git repos in a temp dir.
-# Usage: Tests/SkillScripts/integrate-remove.sh [--no-build] [test name…]
+# Usage (from the repo root): bash .claude/skills/inspector/tests/integrate-remove-test.sh [--no-build] [test name…]
 #   --no-build  skip the one test that builds the throwaway app against this package (about 1 min)
 # Each repo is a minimal SwiftPM app cloned from a bare "upstream", so `origin/HEAD` names the base
 # branch the way it does in a real checkout. Nothing outside the temp dir is touched.
 set -uo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-scripts="$repo_root/.claude/skills/inspector/scripts"
+scripts="$(cd "$(dirname "${BASH_SOURCE[0]}")/../scripts" && pwd)"
 skip_build=0
 selected=()
 for argument in "$@"; do
