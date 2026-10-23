@@ -91,3 +91,30 @@ names it for one call instead. Without it, the commands work as before.
 `scripts/screenshot.sh [file.png] [UDID]` captures the booted iOS simulator at full device
 resolution through `xcrun simctl io <device> screenshot`. With several simulators booted it lists
 them and asks for a UDID. It can't capture a physical device or a Mac app.
+
+## Logs
+
+Logs explain a failure; they never decide whether a step passed. Read them only after a step
+failed: a condition that did not hold, a `hello` that finds no app, or an app that would not
+start.
+
+`scripts/logs.sh [--all] [--since <seconds>]` prints the app's log entries since the last step,
+straight from the simulator's unified log through `xcrun simctl spawn <udid> log show`. It needs no
+Xcode session, so it also works after `simctl launch`.
+
+- **What it reads**: `udid` and `logSubsystem` from `.inspector/config.json`, found the same way
+  the CLI finds the folder (`INSPECTOR_DIR` included). `com.example.app` takes that subsystem and
+  every one below it; a value ending in a dot (`com.example.`) is a prefix.
+- **Window**: from `lastStep.at` in `.inspector/run.json`, the start of the last call.
+  `--since <seconds>` takes the last seconds instead.
+- **Severity**: `error` and `fault`; `--all` adds every other level, `info` and `debug` included.
+- **Output**: `log show --style compact`: a header line, then one line per entry with timestamp,
+  type (`E`, `F`, …), process, `[subsystem:category]` and the message. Usually 10–50 lines.
+- **Errors**: one JSON line on stderr and exit 1, like the CLI. `NO_CONFIG` for a missing folder or
+  a config without `udid` or `logSubsystem` (`detail` is the expected path); `BAD_REQUEST` for no
+  `lastStep` (pass `--since`), or when `log show` fails, for example on a shut-down simulator
+  (`detail` is simctl's message). A usage error exits with 64.
+
+**Alternative: `GetConsoleOutput`** from Xcode's MCP tools, with `oslogSeverity`, a regex
+`pattern` and `tailLimit`. Use it only in two cases: the Xcode launch session that started the app
+is still alive, or the app runs on a physical device, where `simctl` can't reach.
