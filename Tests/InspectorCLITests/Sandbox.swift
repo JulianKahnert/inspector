@@ -31,6 +31,23 @@ extension Environment {
   }
 }
 
+/// An app that keeps the last payload it received in its state, next to a motto that has nothing
+/// to do with any payload, and rejects `reject` by quoting the payload back.
+func echoApp() async throws -> Environment {
+  let received = Mutex<JSONValue>(.null)
+  let inspector = Inspector()
+  inspector.state("received") { received.withLock { $0 } }
+  inspector.state("motto") { "the answer is 42" }
+  inspector.action("login") { (payload: JSONValue) in received.withLock { $0 = payload } }
+  inspector.action("reject") { (text: String) in
+    throw InspectorError(code: .badRequest, message: "rejected `\(text)`", detail: text, didYouMean: [text])
+  }
+  let core = InspectorCore(provider: inspector, app: "Echo")
+  let transport = InMemoryTransport()
+  try await transport.serve { await core.handle($0) }
+  return Environment(transport: { _ in transport }, instanceNames: { _ in ["Echo @ Mac"] })
+}
+
 /// The app names a transport was asked for, in order.
 final class Selections: Sendable {
   let names = Mutex<[String?]>([])
