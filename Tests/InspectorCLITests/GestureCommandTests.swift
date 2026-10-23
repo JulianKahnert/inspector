@@ -308,6 +308,30 @@ struct GestureCommandTests {
     }
   }
 
+  @Test(
+    "a gesture with --until whose app died fails with NO_SESSION and taps nothing",
+    arguments: [ErrorCode.appNotFound, .timeout])
+  func deadAppUntil(code: ErrorCode) async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let xcode = FakeXcode { _ in .text(Self.artifacts) }
+      var environment = xcode.environment()
+      // A terminated app leaves a Bonjour record behind for a while, which answers TIMEOUT.
+      environment.transport = { _ in FailingApp(error: InspectorError(code: code, message: "gone")) }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "1", "2", "--until", #"{"taps":1}"#], in: sandbox.environment(environment, in: "app"))
+
+      #expect(
+        outcome
+          == .stderr(
+            #"{"code":"NO_SESSION","detail":"gone","message":"the app of the session `inspector-app-1` does not answer; run `inspector init`"}"#
+          ))
+      #expect(xcode.calls.isEmpty)
+    }
+  }
+
   /// Xcode with the screen from the fixture `hierarchy` on it: a capture answers with that
   /// hierarchy, a gesture with ``artifacts``.
   private static func screenOf(_ hierarchy: String, in sandbox: Sandbox) throws -> FakeXcode {
@@ -344,4 +368,15 @@ struct GestureCommandTests {
     {"applicationState":"Running","hierarchyPath":"\/tmp\/g-hierarchy.txt","logsPath":"\/tmp\/g-logs.txt",\#
     "screenshotPath":"\/tmp\/g-screenshot.png","thumbnailScreenshotPath":"\/tmp\/g-thumbnailScreenshot.png"}
     """#
+}
+
+/// An app that fails every request with `error`.
+private struct FailingApp: InspectorTransport {
+  let error: InspectorError
+
+  func serve(_ handle: @escaping @Sendable (Request) async -> Response) async throws {}
+
+  func send(_ request: Request) async throws -> Response {
+    throw error
+  }
 }
