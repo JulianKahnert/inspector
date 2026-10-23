@@ -140,3 +140,17 @@ if [[ $check -eq 1 ]]; then
   run_check
   exit 0
 fi
+
+# MARK: - Removal
+
+# shellcheck source=lib/removal.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/removal.sh"
+
+answers=""
+separator=""
+for root in "${roots[@]}"; do
+  remove_integration "$root"
+  answers+="$separator$removal_json"
+  separator=","
+done
+printf '{"repos":[%s]}\n' "$answers"
