@@ -1,14 +1,20 @@
 # inspector CLI reference
 
 Every command prints one JSON document on stdout, with keys sorted. A rejection is one JSON line on
-stderr and exit code 1; branch on `code`, never on `message`. A usage error exits with 64.
+stderr and exit code 1; branch on `code` (every code and its next step: `errors.md`). A usage
+error exits with 64.
 
-`scripts/inspector.sh` takes the same arguments, builds the CLI when it is missing and signs it
-after every build, so Xcode keeps serving it (call the CLI through the script, not after a bare
-`swift build`). The CLI bounds every call itself: discovery gives up after 5 s with
-`APP_NOT_FOUND`, and an app that stops answering ends in `TIMEOUT` after 5 s, or after a `send`'s
-settle timeout plus 5 s; a condition's timeout (`--timeout`, 3 s by default) is added on top, so
-the CLI never gives up before the app.
+`scripts/inspector.sh` takes the same arguments. It runs the CLI of the inspector checkout the
+skill lives in, also through a symlink such as `~/.claude/skills/inspector`, builds it when the
+binary is missing or older than anything in `Sources/`, `Package.swift` or `Package.resolved`, and
+signs it after every build, so Xcode keeps serving it (a bare `swift build` leaves a signature
+Xcode refuses; the script signs that again on its next call). A fresh call adds a few
+milliseconds; a rebuild costs the build.
+
+The CLI bounds every call itself: discovery gives up after 5 s with `APP_NOT_FOUND`, and an app
+that stops answering ends in `TIMEOUT` after 5 s, or after a `send`'s settle timeout plus 5 s; a
+condition's timeout (`--timeout`, 3 s by default) is added on top, so the CLI never gives up
+before the app.
 
 ## Commands
 
@@ -39,16 +45,7 @@ Run `scripts/inspector.sh init` from the app's repository. It ends once `state` 
 - **`--reset`** uninstalls the app before the install, which deletes its data. Use it only when the task needs a fresh app; init never logs in.
 - **`--app <name>`** picks the app when several serve, and the scheme to build when the workspace has a scheme of that name. **`--workspace <path>`** picks the workspace when the repository has several.
 - `config.json` gets every field, `instance` being the full name `hello` reported and `logSubsystem` the bundle ID's vendor prefix (`de.juliankahnert.`), so `logs.sh` covers the app's packages too; `.inspector/` goes into `.git/info/exclude` when nothing ignores it yet.
-
-| What happened | `code` | Next step |
-|---|---|---|
-| `--warm`, but the app does not serve | `APP_NOT_FOUND` or `TIMEOUT` | `init` without `--warm` |
-| The build failed | `XCODE_ERROR`, `message` quotes Xcode's build output | Fix the code, `init` again |
-| The app started but does not serve | `APP_NOT_FOUND` or `TIMEOUT` | Check that the debug build calls `serve()`; with several apps pass `--app` |
-| Xcode has not approved the binary | `NOT_APPROVED` | Stop; a human confirms Xcode's dialog, then `init` again |
-| The selected Xcode has no `mcpbridge` | `XCODE_TOO_OLD` | Stop; a human selects Xcode 27.2 or newer |
-| The device is in another session, or another Xcode error | `XCODE_ERROR` | Read `message`; a session of your own: `scripts/inspector.sh end`, then `init` |
-| No workspace, or several | `BAD_REQUEST` | `--workspace <path>` |
+- The first `init` on a machine opens Xcode's approval dialog for the CLI; until a human confirms it, `init` ends in `NOT_APPROVED`.
 
 ### Without Xcode
 
@@ -106,27 +103,6 @@ string), `optional` (`of`), `array` (`of`), `enum` (`values`: pass one of them a
 `rawValue` (`raw`), `decodable` (`type`: JSON for a `Codable` Swift type), `tuple` (`fields`,
 `input`: object or array), `opaque` (`type`).
 
-## Error codes
-
-| `code` | Meaning | What to do |
-|---|---|---|
-| `UNKNOWN_ACTION_PATH` | No action at that path. `didYouMean` lists the closest registered paths | Take a suggestion, or open the screen that registers it first |
-| `UNKNOWN_STATE_PATH` | The path selects nothing | The screen isn't open yet, or the key contains a dot (see above) |
-| `PAYLOAD_TYPE_MISMATCH` | Missing, extra or undecodable payload | Match the schema from `catalog` |
-| `BAD_REQUEST` | Anything else, including an error the app's action threw | Read `message` and `detail` |
-| `APP_NOT_FOUND` | No serving app within 5 s, or none matches `--app` | Check that a debug build is running and serving, and the name in `inspector apps` |
-| `AMBIGUOUS_APP` | Several apps serve and no `--app` picks one. `detail` lists their instance names | Repeat the call with `--app <name>` |
-| `TIMEOUT` | The app was found but did not answer in time | Check that the app is still running and not stopped in the debugger |
-| `EXPECTATION_FAILED` | The condition did not hold before `--timeout`. `detail` is the last state as a JSON string | Read it with `jq -r .detail \| jq`; then logs or a screenshot explain why |
-| `NO_CONFIG` | The call needs `.inspector/` and there is none, or `INSPECTOR_DIR` names nothing. `detail` is the expected path | `scripts/inspector.sh init`, or fix `INSPECTOR_DIR` |
-| `ENV_MISSING` | A `${NAME}` in the payload has no value in `.inspector/.env`. `detail` lists the names | Add them to `.inspector/.env`; nothing was sent |
-| `NOT_APPROVED` | Xcode has not approved this binary for its tools | Stop and ask the human to confirm Xcode's approval dialog; do not retry |
-| `NO_SESSION` | `config.json` names no session, or the session ended and its app with it | `inspector init` |
-| `XCODE_TOO_OLD` | The selected Xcode has no `mcpbridge` | Ask the human to select Xcode 27.2 or newer |
-| `XCODE_ERROR` | An Xcode tool failed; `message` quotes Xcode | Read `message` |
-| `NO_HIERARCHY` | A capture came back without a hierarchy; `detail` is Xcode's answer | Capture again, else read the screenshot |
-| `NO_SIGNING_IDENTITY` | From `scripts/inspector.sh`: no "Apple Development" identity to sign with | Ask the human to add one in Xcode > Settings > Accounts |
-
 ## Several apps
 
 `scripts/inspector.sh apps` lists every serving app as one JSON array, each checked with `hello`:
@@ -146,13 +122,16 @@ names it for one call instead. Without it, the commands work as before.
 
 - `config.json`: `instance` (the full instance name) is the default for `--app`; `--app` wins.
 - `run.json`: `lastStep` is the last call, `{"arguments","at","command"}`, `at` being its start.
-- `.env`: `NAME=value` lines for `${NAME}` in a `send` payload. Never in git, never printed.
+- `.env`: `NAME=value` lines for `${NAME}` in a `send` payload or `type` text. Never in git, never
+  printed.
 
-## Screenshots
+## Capture, targets and screenshots
 
-`scripts/screenshot.sh [file.png] [UDID]` captures the booted iOS simulator at full device
-resolution through `xcrun simctl io <device> screenshot`. With several simulators booted it lists
-them and asks for a UDID. It can't capture a physical device or a Mac app.
+Diagnosis only, after a failed step. `capture` answers the paths Xcode wrote and the `targets`
+on the screen; every gesture also leaves its `lastScreenshot` and `lastHierarchy` in
+`.inspector/run.json`. Read `targets` (about 1 KB) to find a control or a typed value; open the
+PNG at `screenshot` only when targets, state and logs leave the question open; leave the
+hierarchy file (5 to 25 KB of text) unread. All of it exists only in the simulator, after `init`.
 
 ## Logs
 
