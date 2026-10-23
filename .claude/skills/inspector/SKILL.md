@@ -104,7 +104,8 @@ out again, run `scripts/find-debug-markers.sh <dirs>` and work through its list.
 ## Scripts
 
 - `scripts/inspector.sh [--app name] <command…>` — the CLI with a build-if-missing step
-  (`INSPECTOR_REBUILD=1` forces a build). `apps` lists every serving app.
+  (`INSPECTOR_REBUILD=1` forces a build) and a signing step that keeps Xcode's approval. `apps`
+  lists every serving app.
 - `scripts/wait-state.sh '<jq filter>' [seconds]` — polls `state` until the filter yields something
   other than `null` or `false`; prints the value, and the elapsed time on stderr.
 - `scripts/screenshot.sh [file.png] [UDID]` — PNG of the booted iOS simulator; prints its path.

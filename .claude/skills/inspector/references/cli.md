@@ -3,10 +3,12 @@
 Every command prints one JSON document on stdout, with keys sorted. A rejection is one JSON line on
 stderr and exit code 1; branch on `code`, never on `message`. A usage error exits with 64.
 
-`scripts/inspector.sh` takes the same arguments and builds the CLI when it is missing. The CLI
-bounds every call itself: discovery gives up after 5 s with `APP_NOT_FOUND`, and an app that stops
-answering ends in `TIMEOUT` after 5 s, or after a `send`'s settle timeout plus 5 s; a condition's
-timeout (`--timeout`, 3 s by default) is added on top, so the CLI never gives up before the app.
+`scripts/inspector.sh` takes the same arguments, builds the CLI when it is missing and signs it
+after every build, so Xcode keeps serving it (call the CLI through the script, not after a bare
+`swift build`). The CLI bounds every call itself: discovery gives up after 5 s with
+`APP_NOT_FOUND`, and an app that stops answering ends in `TIMEOUT` after 5 s, or after a `send`'s
+settle timeout plus 5 s; a condition's timeout (`--timeout`, 3 s by default) is added on top, so
+the CLI never gives up before the app.
 
 ## Commands
 
@@ -20,6 +22,7 @@ timeout (`--timeout`, 3 s by default) is added on top, so the CLI never gives up
 | `send <path> <json>` | Runs an action with a payload |
 | `send <path> [json] --until <match> [--timeout s]` | Runs the action, then answers once the state contains the match |
 | `wait <match> [--timeout s]` | The whole state document, once it contains the match |
+| `end` | `{"session","xcode"}`: ends the Xcode session in `.inspector/config.json`; the app that session started ends with it. `xcode` is Xcode's answer, `{"userMessage":"Session doesn't exist anymore"}` for a session that already ended |
 
 ## `state` and paths
 
@@ -77,6 +80,11 @@ string), `optional` (`of`), `array` (`of`), `enum` (`values`: pass one of them a
 | `EXPECTATION_FAILED` | The condition did not hold before `--timeout`. `detail` is the last state as a JSON string | Read it with `jq -r .detail \| jq`; then logs or a screenshot explain why |
 | `NO_CONFIG` | The call needs `.inspector/` and there is none, or `INSPECTOR_DIR` names nothing. `detail` is the expected path | Create the folder there, or fix `INSPECTOR_DIR` |
 | `ENV_MISSING` | A `${NAME}` in the payload has no value in `.inspector/.env`. `detail` lists the names | Add them to `.inspector/.env`; nothing was sent |
+| `NOT_APPROVED` | Xcode has not approved this binary for its tools | Stop and ask the human to confirm Xcode's approval dialog; do not retry |
+| `NO_SESSION` | `config.json` names no session, or the session ended and its app with it | `inspector init` |
+| `XCODE_TOO_OLD` | The selected Xcode has no `mcpbridge` | Ask the human to select Xcode 27.2 or newer |
+| `XCODE_ERROR` | An Xcode tool failed; `message` quotes Xcode | Read `message` |
+| `NO_SIGNING_IDENTITY` | From `scripts/inspector.sh`: no "Apple Development" identity to sign with | Ask the human to add one in Xcode > Settings > Accounts |
 
 ## Several apps
 
