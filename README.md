@@ -97,7 +97,7 @@ $ inspector apps
 [{"app":"DemoHost","live":true,"name":"…","pid":39817,"provider":"Inspector"}]
 
 $ inspector hello
-{"app":"DemoHost","pid":39817,"provider":"Inspector"}
+{"app":"DemoHost","instance":"DemoHost @ …","pid":39817,"provider":"Inspector"}
 
 $ inspector catalog
 {"actions":[{"path":"counter.increment"},{"path":"counter.set","payload":{"kind":"int"}}]}
@@ -119,7 +119,7 @@ $ inspector send counter.increment
 
 ```
 
-- **Several apps**: `inspector apps` lists every serving app and checks each with `hello`; an app that does not answer is listed with `"live":false`. Apps advertise as `<app> @ <device>`. With more than one app serving, every other command fails with `AMBIGUOUS_APP` until `--app` picks one by that name or its `<app>` part. With none, it fails with `APP_NOT_FOUND` after 5 seconds.
+- **Several apps**: `inspector apps` lists every serving app and checks each with `hello`; an app that does not answer is listed with `"live":false`. Apps advertise as `<app> @ <device>`. With more than one app serving, every other command fails with `AMBIGUOUS_APP` until `--app` picks one by that name or its `<app>` part. With none, it fails with `APP_NOT_FOUND` after 5 seconds. A full instance name connects as soon as Bonjour reports it; the `<app>` part, or no `--app`, waits about 500 ms more for a second match, so a caller that talks to one app repeatedly passes the full name, which `hello` prints as `instance`.
 - **Stable output**: Keys are sorted, so two answers with the same content are byte-identical.
 - **Errors**: A rejection goes to stderr as one JSON line and the CLI exits with 1. Branch on `code`, never on `message`.
 - **`didYouMean`**: For an unknown action path, lists the registered paths that share its last segment or its prefix.
@@ -129,11 +129,11 @@ $ inspector send counter.increment
 
 Claude Code gets this loop as the `inspector` skill in `.claude/skills/inspector/`, with scripts for each step. The app runs a debug build that registers state and actions and calls `serve()`.
 
-1. **Build the CLI once**, then call the binary directly. That skips the `swift run` check on every call, and one call then takes about 20–100 ms. Every call is bounded: without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, and an app that stops answering ends in `TIMEOUT`.
+1. **Build the CLI once**, then call the binary directly. That skips the `swift run` check on every call, and one call then takes about 20–100 ms with `--app` set to the full instance name, or about 550 ms without it. Every call is bounded: without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, and an app that stops answering ends in `TIMEOUT`.
 
 2. **Find out what is connected and what it offers.**
    - `dns-sd -B _inspector._tcp` lists every serving app under its device name. An app in the simulator advertises under the Mac's name.
-   - `inspector hello` names the app that answered, and its pid. The CLI connects to the first app it finds, so with several running, check `hello` before anything else.
+   - `inspector hello` names the app that answered, its pid, and the full `instance` name to pass to `--app` from then on.
    - `inspector catalog` lists the actions with their payload schema, `inspector state` returns every registered state reader. Both grow as you navigate: a screen registers its readers and actions when its model is created, so a screen that has not been opened yet is missing.
 
 3. **Navigate to the screen** with one `send` per step. After each step that pushes a screen or presents a sheet, poll `inspector state` until that screen's key appears before you send the next action. It usually takes 100–200 ms. A `send` answer can come back with an empty `diff` even when a screen opened, because that screen registers its state only after the action has settled.
