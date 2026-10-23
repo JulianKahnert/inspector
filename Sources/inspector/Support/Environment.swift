@@ -14,6 +14,9 @@ struct Environment: Sendable {
   var inspectorDirectory: String?
   /// The clock that stamps `run.json` and `config.json`.
   var now: @Sendable () -> Date
+  /// The `.env` values this call filled in; ``InspectorCLI/outcome(of:in:)`` starts each call
+  /// with none.
+  var substitutions = Substitutions()
 
   /// The apps on the network, found through Bonjour, from the process's working directory.
   static var live: Environment {
@@ -23,6 +26,30 @@ struct Environment: Sendable {
       workingDirectory: URL(filePath: FileManager.default.currentDirectoryPath, directoryHint: .isDirectory),
       inspectorDirectory: ProcessInfo.processInfo.environment["INSPECTOR_DIR"],
       now: { Date() })
+  }
+
+  /// The value in `.inspector/.env` of every `${NAME}` in `text`, by name; empty when `text` has
+  /// no placeholder.
+  ///
+  /// The values are masked in everything this call prints and writes from now on.
+  ///
+  /// - Throws: ``ErrorCode/noConfig`` without a folder, ``ErrorCode/envMissing`` naming every
+  ///   placeholder without a value.
+  func placeholderValues(in text: String) throws(InspectorError) -> [String: String] {
+    let names = Placeholders.names(in: text)
+    guard !names.isEmpty else { return [:] }
+    let file = try requiredFolder().url.appending(path: ".env")
+    let available = DotEnv.parse((try? String(contentsOf: file, encoding: .utf8)) ?? "")
+    let missing = names.filter { available[$0] == nil }
+    guard missing.isEmpty else {
+      throw InspectorError(
+        code: .envMissing,
+        message: "no value for \(missing.map { "`${\($0)}`" }.joined(separator: ", ")) in `\(file.path)`",
+        detail: missing.joined(separator: " "))
+    }
+    let values = available.filter { names.contains($0.key) }
+    substitutions.record(values)
+    return values
   }
 
   /// The `.inspector/` folder this call works with, or `nil` when there is none.
