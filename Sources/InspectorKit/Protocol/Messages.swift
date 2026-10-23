@@ -7,7 +7,8 @@
 /// | `{"t":"hello"}` | `{"t":"hello","app","instance"?,"pid","provider"}` |
 /// | `{"t":"catalog"}` | `{"t":"catalog","actions":[…]}` |
 /// | `{"t":"state","path"?}` | `{"t":"state","state":…}` |
-/// | `{"t":"send","path","payload"?,"timeoutMs"?}` | `{"t":"sendResult","settled","state","diff"}` |
+/// | `{"t":"send","path","payload"?,"timeoutMs"?,"until"?,"untilTimeoutMs"?}` | `{"t":"sendResult","settled","state","diff"}` |
+/// | `{"t":"wait","until","timeoutMs"?,"baseline"?}` | `{"t":"sendResult","settled","state","diff"}` |
 ///
 /// Any of them can be answered with `{"t":"error","code","message","detail"?,"didYouMean"?}`
 /// instead. Branch on ``InspectorError/code``, never on the message.
@@ -20,6 +21,8 @@ public enum Request: Equatable, Sendable {
   case state(path: String?)
   /// Builds an action from a dotted path and dispatches it.
   case send(SendRequest)
+  /// Waits inside the app until the state contains a match document.
+  case wait(WaitRequest)
 }
 
 extension Request: Codable {
@@ -38,6 +41,9 @@ extension Request: Codable {
     case .send(let request):
       try container.encode("send", forKey: .t)
       try request.encode(to: encoder)
+    case .wait(let request):
+      try container.encode("wait", forKey: .t)
+      try request.encode(to: encoder)
     }
   }
 
@@ -48,6 +54,7 @@ extension Request: Codable {
     case "catalog": self = .catalog
     case "state": self = .state(path: try container.decodeIfPresent(String.self, forKey: .path))
     case "send": self = .send(try SendRequest(from: decoder))
+    case "wait": self = .wait(try WaitRequest(from: decoder))
     case let other:
       throw DecodingError.dataCorruptedError(
         forKey: .t, in: container, debugDescription: "unknown request type \(other)")
@@ -68,7 +75,7 @@ public enum Response: Equatable, Sendable {
   case catalog(Catalog)
   /// The answer to a state request: the whole state or the selected subtree.
   case state(JSONValue)
-  /// The answer to a send request.
+  /// The answer to a send or a wait request.
   case sendResult(SendResult)
   /// A rejection of any request.
   case error(InspectorError)

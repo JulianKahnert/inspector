@@ -113,6 +113,9 @@ integration*.
 - `scripts/wait-state.sh '<jq filter>' [seconds]` — polls `state` until the filter yields something
   other than `null` or `false`; prints the value, and the elapsed time on stderr.
 - `scripts/screenshot.sh [file.png] [UDID]` — PNG of the booted iOS simulator; prints its path.
+- `scripts/logs.sh [--all] [--since <seconds>]` — after a failed step only: the app's error and
+  fault log entries since that step, from the simulator in `.inspector/config.json`
+  (`references/cli.md` → *Logs*).
 - `scripts/add-to-package.sh <package dir> <target> [--ios-only] [--copy-template]` — adds
   InspectorKit via `swift package add-dependency` / `add-target-dependency`, marked, and rolls
   the manifest back on failure.

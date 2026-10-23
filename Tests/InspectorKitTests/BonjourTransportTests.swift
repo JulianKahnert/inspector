@@ -53,6 +53,20 @@ struct BonjourTransportResponseTimeoutTests {
     let request = Request.send(SendRequest(path: "counter.set", payload: nil, timeoutMs: 30_000))
     #expect(BonjourTransport.responseTimeout(for: request) == .seconds(35))
   }
+
+  @Test("A send with until waits for the settle timeout, then the condition's, plus the margin")
+  func sendWithUntil() {
+    let defaultTimeout = Request.send(SendRequest(path: "counter.set", until: .object([:])))
+    #expect(BonjourTransport.responseTimeout(for: defaultTimeout) == .seconds(13))
+    let explicit = Request.send(SendRequest(path: "counter.set", timeoutMs: 1_000, until: .object([:]), untilTimeoutMs: 20_000))
+    #expect(BonjourTransport.responseTimeout(for: explicit) == .seconds(26))
+  }
+
+  @Test("A wait waits for its timeout, 3 seconds by default, plus the margin")
+  func wait() {
+    #expect(BonjourTransport.responseTimeout(for: .wait(WaitRequest(until: .object([:])))) == .seconds(8))
+    #expect(BonjourTransport.responseTimeout(for: .wait(WaitRequest(until: .object([:]), timeoutMs: 60_000))) == .seconds(65))
+  }
 }
 
 @Suite("BonjourTransport.answer")
