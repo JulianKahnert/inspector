@@ -33,14 +33,19 @@ and a picture you still have to interpret. So:
 
 ## Workflow
 
-1. **Connect and find out where the app is.** Run `scripts/inspector.sh hello`, then
-   `scripts/inspector.sh state`: the app may still show a sheet or a deep screen from an earlier
-   session, and the route has to start from there. The first call builds the CLI (a few seconds);
-   later calls take about 550 ms, or 20–100 ms with `--app` set to the full `instance` name from
-   `hello`, which skips the wait for a second app. `APP_NOT_FOUND` means no debug build is serving: ask the
-   user to start the app instead of retrying. `TIMEOUT` means the app stopped answering, for
-   example at a breakpoint. `AMBIGUOUS_APP` means several apps
-   serve: pick one with `--app` (see `references/cli.md` → *Several apps*).
+1. **Start the app and find out where it is.** In an iOS app's repository run
+   `scripts/inspector.sh init`: it builds, installs and starts the app through Xcode, writes
+   `.inspector/config.json` and answers with `hello` and the whole `state`. After a code change
+   always run it cold; when nothing changed and the app still serves, `init --warm` only reads it.
+   Errors and the path without Xcode: `references/cli.md` → *Init*. For an app you didn't start
+   (a Mac app, a physical device), run `scripts/inspector.sh hello`, then
+   `scripts/inspector.sh state`. Either way the app may still show a sheet or a deep screen from
+   an earlier session, and the route has to start from there. The first call builds the CLI (a
+   few seconds); later calls take about 550 ms, or 20–100 ms with `--app` set to the full
+   `instance` name from `hello`, which `init` stores as the default. `APP_NOT_FOUND` without
+   `init` means no debug build is serving: ask the user to start the app instead of retrying.
+   `TIMEOUT` means the app stopped answering, for example at a breakpoint. `AMBIGUOUS_APP` means
+   several apps serve: pick one with `--app` (see `references/cli.md` → *Several apps*).
 2. **See what's on offer.** `scripts/inspector.sh catalog` lists the actions and their payload
    schemas, and `scripts/inspector.sh state` shows the current state. Both only cover screens whose
    model exists now, so they grow as you navigate.
