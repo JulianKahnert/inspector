@@ -21,6 +21,12 @@ struct Environment: Sendable {
   var launchBridge: @Sendable () throws(InspectorError) -> any BridgeProcess = {
     throw InspectorError(code: .xcodeError, message: "this environment has no Xcode")
   }
+  /// Runs a program such as `xed`, `simctl` or `git` to its end; `command[0]` is its absolute
+  /// path.
+  var runProcess: @Sendable (_ command: [String]) async throws(InspectorError) -> ProcessOutput = {
+    _ throws(InspectorError) in
+    throw InspectorError(code: .badRequest, message: "this environment runs no programs")
+  }
 
   /// The apps on the network, found through Bonjour, and Xcode through `xcrun mcpbridge`, from the
   /// process's working directory.
@@ -31,7 +37,8 @@ struct Environment: Sendable {
       workingDirectory: URL(filePath: FileManager.default.currentDirectoryPath, directoryHint: .isDirectory),
       inspectorDirectory: ProcessInfo.processInfo.environment["INSPECTOR_DIR"],
       now: { Date() },
-      launchBridge: { () throws(InspectorError) in try BridgeSubprocess() })
+      launchBridge: { () throws(InspectorError) in try BridgeSubprocess() },
+      runProcess: { command throws(InspectorError) in try await ProcessOutput.run(command) })
   }
 
   /// Runs `body` with a fresh connection to Xcode's tools, closed when `body` returns.
