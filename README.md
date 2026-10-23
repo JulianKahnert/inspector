@@ -91,7 +91,9 @@ flowchart LR
 inspector [--app name] apps | hello | catalog | state [path]
                       | send <path> [json] [--until <match> [--timeout s]]
                       | wait <match> [--timeout s]
-inspector capture | end
+inspector init [--warm] [--reset] | capture | end
+inspector tap (<x> <y> | --target <name>) | swipe <x1> <y1> <x2> <y2> [s] | type <text>
+                      [--until <match> [--timeout s]]
 ```
 
 Against `demo-host`:
@@ -165,8 +167,8 @@ $ cat .inspector/run.json
 ```
 
 - **`config.json`** binds the calls to an app, a simulator and an Xcode session: `app`, `instance`, `bundleId`, `udid`, `session`, `workspace`, `scheme`, `logSubsystem`, `writtenAt`. Only `inspector init` writes it; `instance` is the default for `--app`, and `--app` wins.
-- **`run.json`** holds what the last calls did: `lastStep` with the command, its arguments and when it started. Each command replaces only its own fields.
-- **`.env`** holds `NAME=value` lines. `send` fills each `${NAME}` in its payload from there and fails with `ENV_MISSING` before sending when a name has no value; `${NAME}` without a folder fails with `NO_CONFIG`, whose `detail` is where the folder was expected.
+- **`run.json`** holds what the last calls did: `lastStep` with the command, its arguments and when it started, and after a `capture` or gesture `lastHierarchy` and `lastScreenshot`. Each command replaces only its own fields.
+- **`.env`** holds `NAME=value` lines. `send` fills each `${NAME}` in its payload from there, `type` in its text, and fails with `ENV_MISSING` before sending when a name has no value; `${NAME}` without a folder fails with `NO_CONFIG`, whose `detail` is where the folder was expected.
 - **Masking**: A value filled in from `.env` shows as `${NAME}` in the answer, in an error and in `run.json`, wherever it appears, also where the state holds it for another reason; a number equal to it becomes the string `"${NAME}"`. Nothing else is masked, whatever its key is called.
 - **Git**: Never commit the folder. List `.inspector/` in `.gitignore` when the integration stays in the repository, or in `.git/info/exclude` when it is added only for a debugging session. `inspector init` adds the exclude entry itself when nothing ignores the folder yet.
 
@@ -189,6 +191,23 @@ $ scripts/inspector.sh end
 $ scripts/inspector.sh capture | jq -c '.targets[] | select(.label == "Stand eintragen")'
 {"hitPoint":[363.3,84],"label":"Stand eintragen","type":"Button"}
 ```
+
+Gestures run in the same session, and **only in the simulator**: Xcode offers no physical device for them. `tap <x> <y>` taps a point, `tap --target <name>` captures first and taps the hit point of the one target whose identifier or label is the name, `swipe <x1> <y1> <x2> <y2> [seconds]` drags from one point to the other, and `type <text>` types into the focused field, with `${NAME}` filled from `.env` and masked like a `send` payload. Each takes `--until` and `--timeout` like `send`: the CLI reads the state, performs the gesture and has the app wait for the match, so the answer is `send`'s, diffed against the state before the gesture. Without `--until` the answer is the command Xcode ran, and for `--target` the target it hit. Every gesture writes Xcode's new screenshot and hierarchy to `run.json` like `capture`.
+
+```console
+$ scripts/inspector.sh send meters.editReading 0 --until '{"meters":{"detail":{"isEnterReadingOpen":true}}}'
+$ sleep 1                                      # let the sheet finish sliding in
+$ scripts/inspector.sh swipe 201 110 201 820 0.3 --until '{"meters":{"detail":{"isEnterReadingOpen":false}}}'
+{"diff":[{"old":"…","path":"meters.detail.editedReadingID"},{"old":true,"path":"meters.detail.isEnterReadingOpen"}],"settled":true,"state":{…}}
+$ scripts/inspector.sh tap --target "Stand eintragen"
+{"gesture":"t 363.3 84","target":{"hitPoint":[363.3,84],"label":"Stand eintragen","type":"Button"}}
+$ scripts/inspector.sh type 2100000
+{"gesture":"sender keyboard kbd 2100000"}
+```
+
+- **The screen lags the state**: the state reports a sheet open as soon as the app decided to present it, while the sheet is still sliding in. A gesture during that animation can be lost (a swipe right after the sheet opened failed every time at 0.2 s, reliably passed after 1 s), so wait about a second after a navigation before a gesture that needs the new screen. A gesture with `--until` shows such a loss as `EXPECTATION_FAILED` instead of a silent miss.
+- **A target** names a control by identifier or label; none is `TARGET_NOT_FOUND`, several at different points `TARGET_AMBIGUOUS`, both with the targets in `detail`. A control with neither, such as an unlabelled text field, is tapped by the coordinates `capture` lists.
+- **Typing** goes to the focused field, after whatever text it holds; Xcode reads `\u{0008}` as backspace and `\u{000A}` as Return.
 
 A refused binary ends in `NOT_APPROVED`, an ended session whose app is gone in `NO_SESSION`, a capture without a hierarchy in `NO_HIERARCHY`; [ADR 004](docs/adr/004-cli.md#commands-through-xcode) has every code, the steps of `init` and the session restart.
 

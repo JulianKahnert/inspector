@@ -24,6 +24,10 @@ the CLI never gives up before the app.
 | `wait <match> [--timeout s]` | The whole state document, once it contains the match |
 | `init [--warm] [--reset] [--workspace path]` | `{"config","hello","state"}`: builds, installs and starts the app through Xcode, writes `.inspector/config.json` and reads the first observation (see *Init* below) |
 | `capture` | `{"screenshot","hierarchy","targets"}`: captures the simulator's screen in the session in `.inspector/config.json`. `targets` lists the controls as `{type, identifier?, label?, placeholder?, value?, hitPoint: [x, y]}`; `value` holds a field's typed text. Find a tap point with `jq '.targets[] \| select(.label == "Sichern")'` |
+| `tap <x> <y>`, `tap --target <name>` | `{"gesture","target"?}`: taps a point, or the `hitPoint` of the one target whose identifier or label is the name (`TARGET_NOT_FOUND` / `TARGET_AMBIGUOUS` list the targets in `detail`). Simulator only |
+| `swipe <x1> <y1> <x2> <y2> [s]` | `{"gesture"}`: drags from one point to the other. Simulator only |
+| `type <text>` | `{"gesture"}`: types into the focused field, after its text; `${NAME}` comes from `.inspector/.env`, `\u{0008}` is backspace. Simulator only |
+| `tap`, `swipe`, `type` … `--until <match> [--timeout s]` | Like `send --until`: the diff against the state before the gesture. Wait about 1 s after opening a sheet before a gesture on it; one during the slide-in animation is lost |
 | `end` | `{"session","xcode"}`: ends the Xcode session in `.inspector/config.json`; the app that session started ends with it. `xcode` is Xcode's answer, `{"userMessage":"Session doesn't exist anymore"}` for a session that already ended |
 
 ## Init
