@@ -13,7 +13,8 @@ changes nothing.
 | `code` | Situation | Who | Next step |
 |---|---|---|---|
 | `APP_NOT_FOUND` | No `.inspector/` yet, or no debug build serves | Agent | `scripts/inspector.sh init` in the app's repository; an app it cannot start (Mac app, physical device): ask the user to start the debug build |
-| `APP_NOT_FOUND` | Right after a cold `init` started the app | Agent | Check that the debug build calls `DebugInspector.start(root:)` and has both `Info.plist` keys (`references/integration.md`), then `scripts/logs.sh` |
+| `APP_NOT_FOUND` | Right after a cold `init` started the app, and the repository has no `DebugInspector.swift` | Agent | Integrate it ([SKILL.md, Integrating](../SKILL.md#integrating)), then cold `init` |
+| `APP_NOT_FOUND` | Right after a cold `init` started the app, and the repository has a `DebugInspector.swift` | Agent | Check that the debug build calls `DebugInspector.start(root:)` and has both `Info.plist` keys (`references/integration.md`), then `scripts/logs.sh` |
 | `APP_NOT_FOUND`, `TIMEOUT` | After `init --warm` | Agent | `init` without `--warm` |
 | `APP_NOT_FOUND` | With `--app <name>` | Agent | `scripts/inspector.sh apps`, then the full `name` it lists |
 | `AMBIGUOUS_APP` | Several apps serve, none picked | Agent | Repeat with `--app` and one full name from `detail` |
@@ -79,5 +80,6 @@ stderr, exits 1 on failure with the manifest restored, and 2 on a usage error.
 | `PACKAGE_NOT_FOUND`, `PLIST_NOT_FOUND` | Agent | Fix the path |
 | `PLIST_INVALID` | Agent | `plutil -convert xml1 <plist>`, then `integrate.sh` again |
 | `INTEGRATION_LEFT` | Agent | `scripts/remove.sh`; a `diff` or `tracked` finding in a commit: change that commit |
+| `INTEGRATION_LEFT` with a `resolved` finding: a build or `swift run` added InspectorKit's pins to a `Package.resolved` | Agent | `scripts/remove.sh`, which puts the file back as it was; never commit the pins |
 | `BASE_NOT_FOUND` | Agent | `--base <branch>` |
 | `NOT_A_REPO`, `NOT_AN_APP_REPO` | Agent | Pass an app's checkout, not a plain folder or the inspector repository |

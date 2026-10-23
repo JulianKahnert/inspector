@@ -218,11 +218,11 @@ struct InspectorFolderTests {
   @Test("a placeholder without a value fails with ENV_MISSING naming every missing variable; nothing is sent")
   func envMissing() async throws {
     try await Sandbox.run { sandbox in
-      try sandbox.write(".inspector/.env", "USER=team\n")
+      try sandbox.write(".inspector/.env", "HANDLE=team\n")
       let environment = sandbox.environment(try await echoApp())
 
       let outcome = await InspectorCLI.outcome(
-        of: ["send", "login", #"{"user":"${USER}","password":"${PASSWORD}","otp":"${OTP}"}"#], in: environment)
+        of: ["send", "login", #"{"user":"${HANDLE}","password":"${PASSWORD}","otp":"${OTP}"}"#], in: environment)
 
       let dotenv = sandbox.url(".inspector/.env").path
       #expect(
@@ -349,16 +349,16 @@ struct InspectorFolderTests {
   @Test("only filled-in values are masked: no key name, and no .env value the payload did not use")
   func noKeywordHeuristic() async throws {
     try await Sandbox.run { sandbox in
-      try sandbox.write(".inspector/.env", "USER=team\nPASSWORD=unused\n")
+      try sandbox.write(".inspector/.env", "HANDLE=team\nPASSWORD=unused\n")
 
       let outcome = await InspectorCLI.outcome(
-        of: ["send", "login", #"{"user":"${USER}","password":"unused","token":"abc"}"#],
+        of: ["send", "login", #"{"user":"${HANDLE}","password":"unused","token":"abc"}"#],
         in: sandbox.environment(try await echoApp()))
 
       #expect(
         outcome
           == .stdout(
-            #"{"diff":[{"new":{"password":"unused","token":"abc","user":"${USER}"},"old":null,"path":"received"}],"settled":true,"state":{"motto":"the answer is 42","received":{"password":"unused","token":"abc","user":"${USER}"}}}"#
+            #"{"diff":[{"new":{"password":"unused","token":"abc","user":"${HANDLE}"},"old":null,"path":"received"}],"settled":true,"state":{"motto":"the answer is 42","received":{"password":"unused","token":"abc","user":"${HANDLE}"}}}"#
           ))
     }
   }

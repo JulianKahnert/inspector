@@ -4,6 +4,8 @@
 //
 //     DebugInspector.start(root: <#appModel#>) // DEBUG INSPECTOR
 //
+// A permanent integration whose release configuration leaves this file out
+// (EXCLUDED_SOURCE_FILE_NAMES) wraps that call line in `#if DEBUG` as well.
 // Everything is registered from the root object, and this file is the only caller of `serve()`.
 #if DEBUG
 import InspectorKit

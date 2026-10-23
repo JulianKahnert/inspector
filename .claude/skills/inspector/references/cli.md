@@ -85,7 +85,7 @@ Take the project, scheme and app name from the repository, and the bundle ID fro
   against the state before the action.
 - The app side gives an action 5 seconds by default.
 - `${NAME}` in the payload is filled from `.inspector/.env` (see below), for example
-  `send session.login '{"user":"${USER}","password":"${SECRET}"}'`. The answer, an error and
+  `send notes.share '{"to":"team","token":"${TOKEN}"}'`. The answer, an error and
   `run.json` show each filled-in value as `${NAME}`, a number equal to one as the string `"${NAME}"`.
 
 ## Conditions: `wait` and `--until`
