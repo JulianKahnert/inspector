@@ -24,7 +24,9 @@ struct Target: Codable, Equatable, Sendable {
   /// placeholder), or a text input in any case. Containers, text, images and the keyboard's keys
   /// are left out: a control carries the label of the text and image inside it.
   static func list(inHierarchy hierarchy: String) -> [Target] {
-    hierarchy.split(whereSeparator: \.isNewline).compactMap { target(in: $0) }
+    // `element` builds a new regex on each access; one per call compiles it once.
+    let element = element
+    return hierarchy.split(whereSeparator: \.isNewline).compactMap { target(in: $0, element) }
   }
 
   /// The one target in `targets` whose identifier or label is `name`.
@@ -48,10 +50,13 @@ struct Target: Codable, Equatable, Sendable {
     return first
   }
 
-  private static func target(in line: Substring) -> Target? {
-    guard let match = try? element.wholeMatch(in: line) else { return nil }
-    let type = String(match.type)
-    guard controls.contains(type), let x = Double(match.x), let y = Double(match.y) else { return nil }
+  private static func target(in line: Substring, _ element: Element) -> Target? {
+    // Most lines are containers and text; skipping them before the regex runs keeps a capture of a
+    // busy screen from spending tens of milliseconds on it.
+    let type = String(line.drop { $0 == " " }.prefix { $0 != "," })
+    guard controls.contains(type), let match = try? element.wholeMatch(in: line),
+      let x = Double(match.x), let y = Double(match.y)
+    else { return nil }
     let target = Target(
       type: type, identifier: text(match.identifier), label: text(match.label),
       placeholder: text(match.placeholder), value: text(match.value), hitPoint: Point(x: x, y: y))
@@ -64,20 +69,20 @@ struct Target: Codable, Equatable, Sendable {
     return String(part)
   }
 
+  private typealias Element = Regex<
+    (
+      Substring, type: Substring, identifier: Substring?, label: Substring?, placeholder: Substring?,
+      value: Substring?, x: Substring, y: Substring
+    )
+  >
+
   /// One element line: `<indent>Type, {{x, y}, {w, h}}, identifier: '…', label: '…',
   /// placeholderValue: '…', value: …, <states>, hitPoint: {x, y}`, every part between the frame
   /// and the hit point optional.
   ///
   /// The value is not quoted and may contain commas; the states that can follow it are known, so
   /// it ends where they begin. A quoted part ends at the quote the next part follows.
-  private static var element:
-    Regex<
-      (
-        Substring, type: Substring, identifier: Substring?, label: Substring?, placeholder: Substring?,
-        value: Substring?, x: Substring, y: Substring
-      )
-    >
-  {
+  private static var element: Element {
     #/
       \ *(?<type>[A-Za-z]+),\ \{\{[^}]*\},\ \{[^}]*\}\}
       (?:,\ identifier:\ '(?<identifier>.*?)')?
