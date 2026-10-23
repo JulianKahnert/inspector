@@ -202,6 +202,112 @@ struct GestureCommandTests {
     #expect(outcome.stderr.contains("Usage: inspector swipe"))
   }
 
+  @Test(
+    "type types the text into the focused field, also text that starts with a dash",
+    arguments: [
+      (["type", "2100000"], "sender keyboard kbd 2100000"),
+      (["type", "-5"], "sender keyboard kbd -5"),
+      (["type", "team was here"], "sender keyboard kbd team was here"),
+    ])
+  func type(arguments: [String], command: String) async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let xcode = FakeXcode { _ in .text(Self.artifacts) }
+
+      let outcome = await InspectorCLI.outcome(of: arguments, in: sandbox.environment(xcode.environment(), in: "app"))
+
+      #expect(outcome == .stdout(#"{"gesture":"\#(command)"}"#))
+      #expect(xcode.calls.map { $0.arguments["interactionCommand"] } == [.string(command)])
+    }
+  }
+
+  @Test("type fills ${NAME} from .env for Xcode and masks the value in its answer and in run.json")
+  func typeSecret() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      try sandbox.write("app/.inspector/.env", "SECRET=s3cr3t-value\n")
+      let xcode = FakeXcode { _ in .text(Self.artifacts) }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["type", "${SECRET}"], in: sandbox.environment(xcode.environment(), in: "app"))
+
+      #expect(outcome == .stdout(#"{"gesture":"sender keyboard kbd ${SECRET}"}"#))
+      #expect(xcode.calls.map { $0.arguments["interactionCommand"] } == ["sender keyboard kbd s3cr3t-value"])
+      #expect(sandbox.read("app/.inspector/run.json")?.contains("s3cr3t-value") == false)
+    }
+  }
+
+  @Test("type with a placeholder .env lacks fails with ENV_MISSING before Xcode is reached")
+  func typeMissingValue() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let xcode = FakeXcode { _ in .text(Self.artifacts) }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["type", "${SECRET}"], in: sandbox.environment(xcode.environment(), in: "app"))
+
+      #expect(outcome.stderr.contains(#""code":"ENV_MISSING""#))
+      #expect(xcode.launched.isEmpty)
+    }
+  }
+
+  @Test("type with --until answers like send")
+  func typeUntil() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let (app, _) = try await Self.screen()
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["type", "42", "--until", #"{"taps":1}"#], in: sandbox.environment(app, in: "app"))
+
+      #expect(outcome == .stdout(#"{"diff":[{"new":1,"old":0,"path":"taps"}],"settled":true,"state":{"taps":1}}"#))
+    }
+  }
+
+  @Test("type takes exactly one text, else it is a usage error", arguments: [["type"], ["type", "a", "b"]])
+  func typeUsage(arguments: [String]) async throws {
+    let outcome = await InspectorCLI.outcome(of: arguments, in: FakeXcode { _ in .silence }.environment())
+
+    #expect(outcome.exitCode == 64)
+    #expect(outcome.stderr.contains("Usage: inspector type"))
+  }
+
+  @Test(
+    "a gesture without .inspector/ fails with NO_CONFIG and starts no bridge",
+    arguments: [["tap", "1", "2"], ["tap", "--target", "Sichern"], ["swipe", "1", "2", "3", "4"], ["type", "x"]])
+  func noFolder(arguments: [String]) async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      let (app, xcode) = try await Self.screen()
+
+      let outcome = await InspectorCLI.outcome(
+        of: arguments + ["--until", #"{"taps":1}"#], in: sandbox.environment(app, in: "app"))
+
+      #expect(outcome.stderr.contains(#""code":"NO_CONFIG""#))
+      #expect(xcode.launched.isEmpty)
+    }
+  }
+
+  @Test("a gesture whose session ended with its app fails with NO_SESSION and taps nothing")
+  func deadSession() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let notFound = #"{"data":"Session not found. It may have already been closed, or the identifier is wrong","type":"error"}"#
+      let xcode = FakeXcode { _ in .error(notFound) }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "1", "2"], in: sandbox.environment(xcode.environment(), in: "app"))
+
+      #expect(outcome.stderr.contains(#""code":"NO_SESSION""#))
+      #expect(xcode.calls.map(\.tool) == ["DeviceInteractionSynthesize"])
+    }
+  }
+
   /// Xcode with the screen from the fixture `hierarchy` on it: a capture answers with that
   /// hierarchy, a gesture with ``artifacts``.
   private static func screenOf(_ hierarchy: String, in sandbox: Sandbox) throws -> FakeXcode {

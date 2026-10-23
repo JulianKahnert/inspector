@@ -9,6 +9,8 @@ enum Gesture: Sendable {
   case tapTarget(String)
   /// A finger moved from one point to another, over a duration in seconds or Xcode's default.
   case swipe(from: Point, to: Point, duration: Double?)
+  /// Text typed on the keyboard into the focused field.
+  case type(String)
 
   /// Performs the gesture in the session `.inspector/config.json` names and, with `condition`,
   /// waits in the app until its state contains the match.
@@ -54,6 +56,9 @@ enum Gesture: Sendable {
       return Performed(gesture: "t \(target.hitPoint.command)", target: target)
     case .swipe(let start, let end, let duration):
       return Performed(gesture: "t \(start.command) f \(end.command)" + (duration.map { " \($0.command)" } ?? ""))
+    case .type(let text):
+      // `kbd` takes the rest of the command as its text, so it has to come last.
+      return Performed(gesture: "sender keyboard kbd \(text)")
     }
   }
 
