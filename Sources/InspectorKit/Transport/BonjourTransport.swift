@@ -66,12 +66,13 @@ public struct BonjourTransport: InspectorTransport {
       guard case .response(let response) = try await connection.receive().content else {
         throw InspectorError(code: .badRequest, message: "unexpected message from app")
       }
-      return Self.answer(response, from: endpoint.name)
+      return Self.stampingInstance(endpoint.name, on: response)
     }
   }
 
-  /// `response` as the CLI reports it: a hello answer names the `instance` it came from.
-  static func answer(_ response: Response, from instance: String) -> Response {
+  /// `response` with `instance` stamped on it when it is a hello answer, so `hello` names the
+  /// instance the CLI reached; every other answer as it is.
+  static func stampingInstance(_ instance: String, on response: Response) -> Response {
     guard case .hello(var hello) = response else { return response }
     hello.instance = instance
     return .hello(hello)

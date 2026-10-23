@@ -43,7 +43,8 @@ struct SendCommand: InspectorCommand {
       path: path,
       payload: payload,
       until: condition.match,
-      untilTimeoutMs: condition.match == nil ? nil : condition.timeout.timeoutMs)
+      // `--timeout` without `--until` is a usage error, so this is `nil` without a match.
+      untilTimeoutMs: condition.timeout.timeoutMs)
     let answer = try await environment.answer(to: .send(request), from: options.app)
     guard let match = condition.match, let result = answer as? SendResult, !result.state.contains(match) else {
       return answer

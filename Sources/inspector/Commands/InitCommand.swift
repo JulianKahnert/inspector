@@ -114,14 +114,14 @@ struct InitCommand: InspectorCommand {
     let scheme = try await selectScheme(active: opened.scheme, in: workspace, on: xcode)
     let target = try await Self.appTarget(of: scheme, in: workspace, on: xcode)
     let settings = try await xcode.call(
-      "GetTargetBuildSettings", ["workspaceIdentifier": .string(workspace), "targetName": .string(target)])
+      .targetBuildSettings, ["workspaceIdentifier": .string(workspace), "targetName": .string(target)])
     let bundleID = Self.buildSetting("PRODUCT_BUNDLE_IDENTIFIER", in: settings.json)
     let executable =
       Self.buildSetting("EXECUTABLE_NAME", in: settings.json) ?? Self.buildSetting("PRODUCT_NAME", in: settings.json)
     if let old = previous?.session {
       // Its app ends with it; Xcode answers a session it no longer knows without an error.
       _ = try await xcode.call(
-        SessionTool.endSession.rawValue, [SessionTool.endSession.sessionParameter: .string(old)])
+        .endSession, [SessionTool.endSession.sessionParameter: .string(old)])
     }
     let session = DeviceSession.newName(repository: repository, at: environment.now())
     let udid = try await DeviceSession.start(session, workspace: workspace, device: previous?.udid, on: xcode)
@@ -139,7 +139,7 @@ struct InitCommand: InspectorCommand {
     }
     // A cold build of a large app takes minutes; Xcode's build error comes back as XCODE_ERROR.
     _ = try await xcode.call(
-      SessionTool.installAndRun.rawValue,
+      .installAndRun,
       [SessionTool.installAndRun.sessionParameter: .string(session), "workspaceIdentifier": .string(workspace)],
       timeout: .seconds(1200))
     return config
@@ -166,7 +166,7 @@ struct InitCommand: InspectorCommand {
   ) async throws(InspectorError) -> (workspace: String, scheme: String?) {
     let opened: JSONValue
     do throws(InspectorError) {
-      opened = try await xcode.call("XcodeOpenWorkspace", ["path": .string(path)], timeout: timeout).json
+      opened = try await xcode.call(.openWorkspace, ["path": .string(path)], timeout: timeout).json
     } catch where error.code == .notApproved {
       throw InspectorError(
         code: .notApproved,
@@ -196,13 +196,13 @@ struct InitCommand: InspectorCommand {
     active: String?, in workspace: String, on xcode: XcodeBridge
   ) async throws(InspectorError) -> String? {
     guard let app = options.app.map(Self.appName), app != active else { return active }
-    let schemes = try await xcode.call("XcodeListSchemes", ["workspaceIdentifier": .string(workspace)]).json
+    let schemes = try await xcode.call(.listSchemes, ["workspaceIdentifier": .string(workspace)]).json
     let names = (schemes.objectValue?["schemes"]?.arrayValue ?? []).compactMap {
       $0.objectValue?["name"]?.stringValue
     }
     guard names.contains(app) else { return active }
     _ = try await xcode.call(
-      "XcodeSwitchScheme", ["workspaceIdentifier": .string(workspace), "schemeName": .string(app)])
+      .switchScheme, ["workspaceIdentifier": .string(workspace), "schemeName": .string(app)])
     return app
   }
 
@@ -211,7 +211,7 @@ struct InitCommand: InspectorCommand {
     of scheme: String?, in workspace: String, on xcode: XcodeBridge
   ) async throws(InspectorError) -> String {
     let targets = try await xcode.call(
-      "XcodeListTargets", ["workspaceIdentifier": .string(workspace), "productTypeFilter": .array(["application"])]
+      .listTargets, ["workspaceIdentifier": .string(workspace), "productTypeFilter": .array(["application"])]
     ).json
     let names = (targets.objectValue?["targets"]?.arrayValue ?? []).compactMap {
       $0.objectValue?["name"]?.stringValue
@@ -252,10 +252,8 @@ struct InitCommand: InspectorCommand {
   private static func observe(
     _ selector: String?, in environment: Environment
   ) async throws(InspectorError) -> (Hello, JSONValue) {
-    guard case .hello(let hello) = try await environment.response(to: .hello, from: selector),
-      case .state(let state) = try await environment.response(to: .state(path: nil), from: hello.instance ?? selector)
-    else { throw InspectorError(code: .badRequest, message: "the app answered with an unexpected response") }
-    return (hello, state)
+    let hello = try await environment.hello(from: selector)
+    return (hello, try await environment.state(from: hello.instance ?? selector))
   }
 
   /// ``observe(_:in:)`` for an app that has just started and may not serve yet: each try waits

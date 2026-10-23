@@ -33,6 +33,6 @@ struct SwipeCommand: InspectorCommand {
     let gesture = Gesture.swipe(
       from: Point(x: coordinates[0], y: coordinates[1]), to: Point(x: coordinates[2], y: coordinates[3]),
       duration: coordinates.count == 5 ? coordinates[4] : nil)
-    return try await gesture.perform(until: condition, app: options.app, in: environment)
+    return try await gesture.perform(until: condition.request, app: options.app, in: environment)
   }
 }

@@ -53,8 +53,9 @@ final class XcodeBridge {
   ///   ``ErrorCode/xcodeError`` with Xcode's text when the tool fails, and ``ErrorCode/timeout``
   ///   when it does not answer within `timeout`.
   func call(
-    _ tool: String, _ arguments: [String: JSONValue], timeout: Duration = .seconds(30)
+    _ xcodeTool: XcodeTool, _ arguments: [String: JSONValue], timeout: Duration = .seconds(30)
   ) async throws(InspectorError) -> ToolResult {
+    let tool = xcodeTool.rawValue
     let id = try send("tools/call", params: .object(["name": .string(tool), "arguments": .object(arguments)]))
     let reply = try await reply(to: id, within: timeout, for: tool)
     if let error = reply["error"] {
@@ -151,6 +152,19 @@ final class XcodeBridge {
     }
     return InspectorError(code: .xcodeError, message: "`xcrun mcpbridge` exited before it answered", detail: detail)
   }
+}
+
+/// Every tool of Xcode's the CLI calls, by the name Xcode gives it.
+enum XcodeTool: String, Sendable {
+  case openWorkspace = "XcodeOpenWorkspace"
+  case listSchemes = "XcodeListSchemes"
+  case switchScheme = "XcodeSwitchScheme"
+  case listTargets = "XcodeListTargets"
+  case targetBuildSettings = "GetTargetBuildSettings"
+  case startSession = "DeviceInteractionStartWorkspaceSession"
+  case synthesize = "DeviceInteractionSynthesize"
+  case installAndRun = "DeviceInteractionInstallAndRun"
+  case endSession = "DeviceInteractionEndSession"
 }
 
 extension Duration {

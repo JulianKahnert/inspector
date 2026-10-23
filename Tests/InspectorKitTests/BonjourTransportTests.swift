@@ -69,18 +69,18 @@ struct BonjourTransportResponseTimeoutTests {
   }
 }
 
-@Suite("BonjourTransport.answer")
-struct BonjourTransportAnswerTests {
+@Suite("BonjourTransport.stampingInstance")
+struct BonjourTransportStampingInstanceTests {
   @Test("A hello answer names the instance the app was reached under")
   func helloCarriesInstance() {
-    let response = BonjourTransport.answer(
-      .hello(Hello(app: "DemoHost", pid: 1, provider: "Inspector")), from: "DemoHost @ Mac")
+    let response = BonjourTransport.stampingInstance(
+      "DemoHost @ Mac", on: .hello(Hello(app: "DemoHost", pid: 1, provider: "Inspector")))
     #expect(response == .hello(Hello(app: "DemoHost", instance: "DemoHost @ Mac", pid: 1, provider: "Inspector")))
   }
 
   @Test("Every other answer passes through unchanged")
   func otherAnswersUnchanged() {
-    #expect(BonjourTransport.answer(.state(.int(1)), from: "DemoHost @ Mac") == .state(.int(1)))
+    #expect(BonjourTransport.stampingInstance("DemoHost @ Mac", on: .state(.int(1))) == .state(.int(1)))
   }
 }
 
