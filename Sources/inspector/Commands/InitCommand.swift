@@ -304,7 +304,8 @@ struct InitCommand: InspectorCommand {
       if !text.isEmpty, !text.hasSuffix("\n") { text += "\n" }
       try FileManager.default.createDirectory(
         at: exclude.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try Data((text + "/.inspector/\n").utf8).write(to: exclude, options: .atomic)
+      // The same marked entry as `integrate.sh` writes, which `remove.sh` takes out again.
+      try Data((text + "# DEBUG INSPECTOR\n/.inspector/\n").utf8).write(to: exclude, options: .atomic)
     } catch {
       throw InspectorError(
         code: .badRequest, message: "could not add `.inspector/` to `\(exclude.path)`", detail: "\(error)")

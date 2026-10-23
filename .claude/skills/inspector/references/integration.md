@@ -194,7 +194,8 @@ directly below it, such as the checkouts in a workspace.
 `remove.sh` reverses the recorded patches, which also drops the lines SwiftPM added without a
 marker (`dependencies: [`, a comma), restores each `Package.resolved` that gained only
 InspectorKit's pins, deletes every file whose first line carries the marker and every marked line
-left, removes `.inspector/` and its exclude entry. A file changed so its patch no longer applies
+left, removes `.inspector/` and its exclude entry (`init` writes the same marked entry), unless
+another worktree of the repository still has a `.inspector/`. A file changed so its patch no longer applies
 loses only its marked lines, and the answer's `notes` says which.
 
 `--check` exits 1 with `INTEGRATION_LEFT` while any of these is left, and `detail` lists each with
