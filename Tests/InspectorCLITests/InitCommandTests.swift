@@ -88,7 +88,8 @@ struct InitCommandTests {
             arguments: ["interactionSessionKey": "inspector-app-20261019-085320", "workspaceIdentifier": "workspace-1"]),
         ])
       #expect(try sandbox.json("app/.inspector/config.json") == (try JSONDecoder().decode(JSONValue.self, from: Data(config.utf8))))
-      #expect(sandbox.read("app/.git/info/exclude") == "/.inspector/\n")
+      // Marked like integrate.sh's entry, so remove.sh takes it out again.
+      #expect(sandbox.read("app/.git/info/exclude") == "# DEBUG INSPECTOR\n/.inspector/\n")
     }
   }
 
