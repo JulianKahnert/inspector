@@ -1,0 +1,188 @@
+Device orientation: Portrait
+------------------------
+Application bundle identifier: de.juliankahnert.RoommateAlbert
+Application UI orientation: Portrait
+Application, pid: 99012, label: 'Roommate Albert'
+ Window, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+  Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+  Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+   Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+    Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+     Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+      Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+       Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+        Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+         Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+          Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+           Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+            Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+             NavigationBar, {{0.0, 62.0}, {402.0, 106.0}}, identifier: 'Strom', hitPoint: {201.0, 115.0}
+              Button, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Zähler', hitPoint: {38.0, 84.0}
+              Button, {{292.0, 66.0}, {36.7, 36.0}}, label: 'Ändern', hitPoint: {310.3, 84.0}
+              Button, {{344.7, 66.0}, {37.3, 36.0}}, label: 'Stand eintragen', hitPoint: {363.3, 84.0}
+              StaticText, {{16.0, 119.7}, {96.3, 40.7}}, label: 'Strom', hitPoint: {64.2, 140.0}
+             Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+              Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+               Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+                Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+                 CollectionView, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+                  Other, {{-16.0, -1580.0}, {434.0, 1944.0}}, hitPoint: {201.0, 182.0}
+                  Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+                   Other, {{0.0, 0.0}, {402.0, 156.0}}, hitPoint: {201.0, 78.0}
+                   Other, {{0.0, 741.0}, {402.0, 133.0}}, hitPoint: {201.0, 807.5}
+                  Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+                   Other, {{0.0, 741.0}, {402.0, 133.0}}, hitPoint: {201.0, 807.5}
+                  Cell, {{16.0, 168.0}, {370.0, 40.3}}, hitPoint: {201.0, 188.2}
+                   Other, {{16.0, 168.0}, {370.0, 40.3}}, hitPoint: {201.0, 188.2}
+                   Other, {{16.0, 168.0}, {370.0, 40.3}}, hitPoint: {201.0, 188.2}
+                    Other, {{16.0, 168.0}, {370.0, 40.3}}, hitPoint: {201.0, 188.2}
+                     Other, {{16.0, 168.0}, {370.0, 40.3}}, hitPoint: {201.0, 188.2}
+                      StaticText, {{16.0, 168.0}, {370.0, 40.3}}, label: 'Gerät', hitPoint: {201.0, 188.2}
+                  Cell, {{16.0, 208.3}, {370.0, 86.0}}, hitPoint: {201.0, 251.3}
+                   Other, {{16.0, 208.3}, {370.0, 86.0}}, hitPoint: {201.0, 251.3}
+                    Other, {{16.0, 208.3}, {370.0, 86.0}}, hitPoint: {201.0, 251.3}
+                   Other, {{16.0, 208.3}, {370.0, 86.0}}, hitPoint: {201.0, 251.3}
+                    Other, {{16.0, 208.3}, {370.0, 86.0}}, hitPoint: {201.0, 251.3}
+                     Other, {{16.0, 208.3}, {370.0, 86.0}}, hitPoint: {201.0, 251.3}
+                      Button, {{16.0, 208.3}, {370.0, 86.0}}, label: '1ESY1160123456, Fotos: 0', hitPoint: {201.0, 251.3}
+                       Image, {{32.0, 223.3}, {56.0, 56.0}}, identifier: 'photo', label: 'Foto', hitPoint: {60.0, 251.3}
+                       StaticText, {{100.0, 232.0}, {147.3, 20.3}}, label: '1ESY1160123456', hitPoint: {173.7, 242.2}
+                       StaticText, {{100.0, 255.0}, {49.3, 15.7}}, label: 'Fotos: 0', hitPoint: {124.7, 262.8}
+                  Cell, {{16.0, 294.3}, {370.0, 52.0}}, hitPoint: {201.0, 320.3}
+                   Other, {{16.0, 294.3}, {370.0, 52.0}}, hitPoint: {201.0, 320.3}
+                    Other, {{16.0, 294.3}, {370.0, 52.0}}, hitPoint: {201.0, 320.3}
+                   Other, {{16.0, 294.3}, {370.0, 52.0}}, hitPoint: {201.0, 320.3}
+                    Other, {{16.0, 294.3}, {370.0, 52.0}}, hitPoint: {201.0, 320.3}
+                     Other, {{16.0, 294.3}, {370.0, 52.0}}, hitPoint: {201.0, 320.3}
+                      Button, {{16.0, 294.3}, {370.0, 52.0}}, label: 'Fotos dieses Zählers suchen', hitPoint: {201.0, 320.3}
+                       Image, {{31.3, 308.3}, {29.3, 24.0}}, identifier: 'photo.badge.magnifyingglass', label: 'Foto Mit Lupen-Badge', hitPoint: {46.0, 320.3}
+                       StaticText, {{31.3, 308.3}, {258.0, 24.0}}, label: 'Fotos dieses Zählers suchen', hitPoint: {160.3, 320.3}
+                  Other, {{100.0, 293.3}, {270.0, 1.0}}, hitPoint: {235.0, 293.8}
+                  Other, {{-16.0, 364.0}, {434.0, 178.7}}, hitPoint: {201.0, 453.3}
+                  Cell, {{16.0, 364.0}, {370.0, 40.3}}, hitPoint: {201.0, 384.2}
+                   Other, {{16.0, 364.0}, {370.0, 40.3}}, hitPoint: {201.0, 384.2}
+                   Other, {{16.0, 364.0}, {370.0, 40.3}}, hitPoint: {201.0, 384.2}
+                    Other, {{16.0, 364.0}, {370.0, 40.3}}, hitPoint: {201.0, 384.2}
+                     Other, {{16.0, 364.0}, {370.0, 40.3}}, hitPoint: {201.0, 384.2}
+                      StaticText, {{16.0, 364.0}, {370.0, 40.3}}, label: 'Frühere Geräte', hitPoint: {201.0, 384.2}
+                  Cell, {{16.0, 404.3}, {370.0, 68.7}}, hitPoint: {201.0, 438.7}
+                   Other, {{16.0, 404.3}, {370.0, 68.7}}, hitPoint: {201.0, 438.7}
+                    Other, {{16.0, 404.3}, {370.0, 68.7}}, hitPoint: {201.0, 438.7}
+                   Other, {{16.0, 404.3}, {370.0, 68.7}}, hitPoint: {201.0, 438.7}
+                    Other, {{16.0, 404.3}, {370.0, 68.7}}, hitPoint: {201.0, 438.7}
+                     Other, {{16.0, 404.3}, {370.0, 68.7}}, hitPoint: {201.0, 438.7}
+                      Button, {{16.0, 404.3}, {370.0, 68.7}}, label: '1ESY1160098765, 1. Juni 2024 – 14. März 2025', hitPoint: {201.0, 438.7}
+                       StaticText, {{32.0, 419.3}, {147.3, 20.3}}, label: '1ESY1160098765', hitPoint: {105.7, 429.5}
+                       StaticText, {{32.0, 442.3}, {171.0, 15.7}}, label: '1. Juni 2024 – 14. März 2025', hitPoint: {117.5, 450.2}
+                  Cell, {{16.0, 473.0}, {370.0, 52.0}}, hitPoint: {201.0, 499.0}
+                   Other, {{16.0, 473.0}, {370.0, 52.0}}, hitPoint: {201.0, 499.0}
+                    Other, {{16.0, 473.0}, {370.0, 52.0}}, hitPoint: {201.0, 499.0}
+                   Other, {{16.0, 473.0}, {370.0, 52.0}}, hitPoint: {201.0, 499.0}
+                    Other, {{16.0, 473.0}, {370.0, 52.0}}, hitPoint: {201.0, 499.0}
+                     Other, {{16.0, 473.0}, {370.0, 52.0}}, hitPoint: {201.0, 499.0}
+                      Button, {{16.0, 473.0}, {370.0, 52.0}}, label: 'Zählerwechsel eintragen', hitPoint: {201.0, 499.0}
+                       StaticText, {{30.7, 488.3}, {228.3, 21.7}}, label: 'Zählerwechsel eintragen', hitPoint: {144.8, 499.2}
+                       Image, {{30.7, 488.3}, {26.7, 21.7}}, identifier: 'arrow.triangle.2.circlepath', label: 'Synchronisieren', hitPoint: {44.0, 499.2}
+                  Other, {{32.0, 472.0}, {338.0, 1.0}}, hitPoint: {201.0, 472.5}
+                  Other, {{-16.0, 542.3}, {434.0, 138.0}}, hitPoint: {201.0, 611.3}
+                  Cell, {{16.0, 542.3}, {370.0, 40.3}}, hitPoint: {201.0, 562.5}
+                   Other, {{16.0, 542.3}, {370.0, 40.3}}, hitPoint: {201.0, 562.5}
+                   Other, {{16.0, 542.3}, {370.0, 40.3}}, hitPoint: {201.0, 562.5}
+                    Other, {{16.0, 542.3}, {370.0, 40.3}}, hitPoint: {201.0, 562.5}
+                     Other, {{16.0, 542.3}, {370.0, 40.3}}, hitPoint: {201.0, 562.5}
+                      StaticText, {{16.0, 542.3}, {370.0, 40.3}}, label: 'Tarife', hitPoint: {201.0, 562.5}
+                  Cell, {{16.0, 582.7}, {370.0, 52.0}}, hitPoint: {201.0, 608.7}
+                   Other, {{16.0, 582.7}, {370.0, 52.0}}, hitPoint: {201.0, 608.7}
+                    Other, {{16.0, 582.7}, {370.0, 52.0}}, hitPoint: {201.0, 608.7}
+                   Other, {{16.0, 582.7}, {370.0, 52.0}}, hitPoint: {201.0, 608.7}
+                    Other, {{16.0, 582.7}, {370.0, 52.0}}, hitPoint: {201.0, 608.7}
+                     Other, {{16.0, 582.7}, {370.0, 52.0}}, hitPoint: {201.0, 608.7}
+                      Button, {{16.0, 582.7}, {370.0, 52.0}}, label: 'Tarif hinzufügen', hitPoint: {201.0, 608.7}
+                       StaticText, {{33.3, 598.0}, {161.3, 21.7}}, label: 'Tarif hinzufügen', hitPoint: {114.0, 608.8}
+                       Image, {{33.3, 598.0}, {21.7, 21.7}}, identifier: 'plus.circle', label: 'Hinzufügen', hitPoint: {44.2, 608.8}
+                  Cell, {{16.0, 634.7}, {370.0, 45.7}}, hitPoint: {201.0, 657.5}
+                   Other, {{16.0, 634.7}, {370.0, 45.7}}, hitPoint: {201.0, 657.5}
+                   Other, {{16.0, 634.7}, {370.0, 45.7}}, hitPoint: {201.0, 657.5}
+                    Other, {{16.0, 634.7}, {370.0, 45.7}}, hitPoint: {201.0, 657.5}
+                     Other, {{16.0, 634.7}, {370.0, 45.7}}, hitPoint: {201.0, 657.5}
+                      StaticText, {{16.0, 634.7}, {370.0, 45.7}}, label: 'Ein Tarif gilt ab seinem Beginn, bis der nächste beginnt. Die Statistik zeigt, was der Verbrauch kostet.', hitPoint: {201.0, 657.5}
+                  Other, {{-16.0, 680.3}, {434.0, 2032.0}}, hitPoint: {201.0, 777.2}
+                  Cell, {{16.0, 680.3}, {370.0, 40.3}}, hitPoint: {201.0, 700.5}
+                   Other, {{16.0, 680.3}, {370.0, 40.3}}, hitPoint: {201.0, 700.5}
+                   Other, {{16.0, 680.3}, {370.0, 40.3}}, hitPoint: {201.0, 700.5}
+                    Other, {{16.0, 680.3}, {370.0, 40.3}}, hitPoint: {201.0, 700.5}
+                     Other, {{16.0, 680.3}, {370.0, 40.3}}, hitPoint: {201.0, 700.5}
+                      StaticText, {{16.0, 680.3}, {370.0, 40.3}}, label: 'Total', hitPoint: {201.0, 700.5}
+                  Cell, {{16.0, 720.7}, {370.0, 68.7}}, hitPoint: {201.0, 755.0}
+                   Other, {{16.0, 720.7}, {370.0, 68.7}}, hitPoint: {201.0, 755.0}
+                    Other, {{16.0, 720.7}, {370.0, 68.7}}, hitPoint: {201.0, 755.0}
+                   Other, {{16.0, 720.7}, {370.0, 68.7}}, hitPoint: {201.0, 755.0}
+                    Other, {{16.0, 720.7}, {370.0, 68.7}}, hitPoint: {201.0, 755.0}
+                     Other, {{16.0, 720.7}, {370.0, 68.7}}, hitPoint: {201.0, 755.0}
+                      Button, {{16.0, 720.7}, {370.0, 68.7}}, label: '2.000,0 kWh, 1. Okt. 2026, 10:00, Von Hand eingetragen', hitPoint: {201.0, 755.0}
+                       StaticText, {{50.0, 735.7}, {319.3, 38.7}}, label: '2.000,0 kWh, 1. Okt. 2026, 10:00, Von Hand eingetragen', hitPoint: {209.7, 755.0}
+                        StaticText, {{50.0, 735.7}, {99.3, 20.3}}, label: '2.000,0 kWh', hitPoint: {99.7, 745.8}
+                        Image, {{357.3, 748.7}, {12.0, 13.0}}, identifier: 'hand.point.up.left', label: 'Von Hand eingetragen', hitPoint: {363.3, 755.2}
+                        StaticText, {{50.0, 758.7}, {115.0, 15.7}}, label: '1. Okt. 2026, 10:00', hitPoint: {107.5, 766.5}
+                       Other, {{32.0, 750.0}, {10.0, 10.0}}, hitPoint: {37.0, 755.0}
+                  Cell, {{16.0, 789.3}, {370.0, 68.7}}, hitPoint: {201.0, 823.7}
+                   Other, {{16.0, 789.3}, {370.0, 68.7}}, hitPoint: {201.0, 823.7}
+                    Other, {{16.0, 789.3}, {370.0, 68.7}}, hitPoint: {201.0, 823.7}
+                   Other, {{16.0, 789.3}, {370.0, 68.7}}, hitPoint: {201.0, 823.7}
+                    Other, {{16.0, 789.3}, {370.0, 68.7}}, hitPoint: {201.0, 823.7}
+                     Other, {{16.0, 789.3}, {370.0, 68.7}}, hitPoint: {201.0, 823.7}
+                      Button, {{16.0, 789.3}, {370.0, 68.7}}, label: '150,0 kWh, 14. März 2025, 01:00, Von Hand eingetragen', hitPoint: {201.0, 823.7}
+                       StaticText, {{50.0, 804.3}, {319.3, 38.7}}, label: '150,0 kWh, 14. März 2025, 01:00, Von Hand eingetragen', hitPoint: {209.7, 823.7}
+                        StaticText, {{50.0, 804.3}, {84.3, 20.3}}, label: '150,0 kWh', hitPoint: {92.2, 814.5}
+                        Image, {{357.3, 817.3}, {12.0, 13.0}}, identifier: 'hand.point.up.left', label: 'Von Hand eingetragen', hitPoint: {363.3, 823.8}
+                        StaticText, {{50.0, 827.3}, {127.7, 15.7}}, label: '14. März 2025, 01:00', hitPoint: {113.8, 835.2}
+                       Other, {{32.0, 818.7}, {10.0, 10.0}}, hitPoint: {37.0, 823.7}
+                  Other, {{50.0, 788.3}, {320.0, 1.0}}, hitPoint: {210.0, 788.8}
+                  Cell, {{16.0, 858.0}, {370.0, 86.3}}, hitPoint: {201.0, 866.0}
+                   Other, {{16.0, 858.0}, {370.0, 86.3}}, hitPoint: {201.0, 866.0}
+                    Other, {{16.0, 858.0}, {370.0, 86.3}}, hitPoint: {201.0, 866.0}
+                   Other, {{16.0, 858.0}, {370.0, 86.3}}, hitPoint: {201.0, 866.0}
+                    Other, {{16.0, 858.0}, {370.0, 86.3}}, hitPoint: {201.0, 866.0}
+                     Other, {{16.0, 858.0}, {370.0, 86.3}}, hitPoint: {201.0, 866.0}
+                      Button, {{16.0, 858.0}, {370.0, 86.3}}, label: 'Zähler getauscht am 14. März 2025, 1.250,5 kWh, 14. März 2025, 01:00, Von Hand eingetragen', hitPoint: {201.0, 866.0}
+                       StaticText, {{50.0, 873.0}, {223.7, 15.7}}, label: 'Zähler getauscht am 14. März 2025', hitPoint: {161.8, 873.5}
+                  Other, {{50.0, 857.0}, {320.0, 1.0}}, hitPoint: {210.0, 857.5}
+                  Other, {{369.0, 116.0}, {30.0, 675.0}}, label: 'Vertikaler Rollbalken, 2 Seiten', value: 0 %, hitPoint: {384.0, 453.5}
+                   Other, {{396.0, 119.0}, {3.0, 558.3}}, hitPoint: {397.5, 398.2}
+                  Other, {{369.0, 116.0}, {30.0, 675.0}}, label: 'Vertikaler Rollbalken, 2 Seiten', value: 0 %, hitPoint: {384.0, 453.5}
+                   Other, {{396.0, 119.0}, {3.0, 558.3}}, hitPoint: {397.5, 398.2}
+             Toolbar, {{0.0, 0.0}, {402.0, 874.0}}, identifier: 'Toolbar', label: 'Symbolleiste', hitPoint: {201.0, 437.0}
+              Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+       Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+        Other, {{0.0, 791.0}, {402.0, 83.0}}, hitPoint: {201.0, 832.5}
+         Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+          TabBar, {{0.0, 791.0}, {402.0, 83.0}}, label: 'Tableiste', hitPoint: {201.0, 832.5}
+           Other, {{21.0, 791.0}, {360.0, 62.0}}, hitPoint: {201.0, 822.0}
+            Other, {{21.0, 791.0}, {100.7, 54.0}}, hitPoint: {71.3, 818.0}
+            Other, {{21.0, 791.0}, {360.0, 62.0}}, hitPoint: {201.0, 822.0}
+             Button, {{25.0, 795.0}, {100.7, 54.0}}, label: 'Zähler', Selected, hitPoint: {75.3, 822.0}
+              Image, {{61.7, 801.3}, {27.3, 27.3}}, identifier: 'gauge.with.dots.needle.33percent', label: 'Skala mit Punkten und Nadel bei 33 Prozent', hitPoint: {75.3, 815.0}
+             Button, {{97.7, 795.0}, {100.7, 54.0}}, label: 'Prüfen', value: 4 Objekte, hitPoint: {148.0, 822.0}
+              Image, {{131.7, 803.0}, {33.0, 23.7}}, identifier: 'tray.fill', label: 'Eingang', hitPoint: {148.2, 814.8}
+             Button, {{170.4, 795.0}, {100.7, 54.0}}, label: 'Statistik', hitPoint: {220.7, 822.0}
+              Image, {{203.4, 802.3}, {35.0, 25.3}}, identifier: 'chart.bar.fill', label: 'Diagrammspalte', hitPoint: {220.9, 815.0}
+             Button, {{243.1, 795.0}, {133.9, 54.0}}, label: 'Einstellungen', hitPoint: {310.0, 822.0}
+              Image, {{294.8, 799.7}, {30.3, 30.3}}, identifier: 'gear', label: 'Einstellungen', hitPoint: {309.9, 814.8}
+            Other, {{21.0, 791.0}, {360.0, 62.0}}, hitPoint: {201.0, 822.0}
+            Other, {{25.0, 795.0}, {100.7, 54.0}}, hitPoint: {75.3, 822.0}
+             Other, {{25.0, 795.0}, {100.7, 54.0}}, hitPoint: {75.3, 822.0}
+              Other, {{25.0, 795.0}, {100.7, 54.0}}, hitPoint: {75.3, 822.0}
+              Other, {{25.0, 795.0}, {100.7, 54.0}}, hitPoint: {75.3, 822.0}
+               Other, {{25.0, 795.0}, {100.7, 54.0}}, hitPoint: {75.3, 822.0}
+                Other, {{25.0, 795.0}, {100.7, 54.0}}, hitPoint: {75.3, 822.0}
+                 Other, {{25.0, 795.0}, {100.7, 54.0}}, hitPoint: {75.3, 822.0}
+                Other, {{25.0, 795.0}, {100.7, 54.0}}, hitPoint: {75.3, 822.0}
+               Other, {{25.0, 795.0}, {100.7, 54.0}}, hitPoint: {75.3, 822.0}
+         Other, {{0.0, 791.0}, {402.0, 83.0}}, hitPoint: {201.0, 832.5}
+          Other, {{0.0, 791.0}, {402.0, 83.0}}, hitPoint: {201.0, 832.5}
+           Other, {{0.0, 791.0}, {402.0, 83.0}}, hitPoint: {201.0, 832.5}
+            Other, {{0.0, 791.0}, {402.0, 83.0}}, hitPoint: {201.0, 832.5}
+             Other, {{0.0, 791.0}, {402.0, 83.0}}, hitPoint: {201.0, 832.5}
+              Other, {{0.0, 791.0}, {402.0, 83.0}}, hitPoint: {201.0, 832.5}
+            Other, {{0.0, 791.0}, {402.0, 83.0}}, hitPoint: {201.0, 832.5}
+             Other, {{0.0, 791.0}, {402.0, 83.0}}, hitPoint: {201.0, 832.5}

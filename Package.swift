@@ -20,7 +20,10 @@ let package = Package(
             swiftSettings: .standard),
         .executableTarget(name: "demo-host", dependencies: ["InspectorKit"], swiftSettings: .standard),
         .testTarget(name: "InspectorKitTests", dependencies: ["InspectorKit"], swiftSettings: .standard),
-        .testTarget(name: "InspectorCLITests", dependencies: ["inspector", "InspectorKit"], swiftSettings: .standard),
+        .testTarget(
+            name: "InspectorCLITests", dependencies: ["inspector", "InspectorKit"],
+            // Hierarchies Xcode's device interaction tools captured from a running app.
+            resources: [.copy("Fixtures")], swiftSettings: .standard),
     ]
 )
 
