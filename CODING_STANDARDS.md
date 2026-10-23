@@ -20,7 +20,7 @@ The shared standards are generated from the Obsidian vault into `docs/coding-sta
 
 ### Architecture
 
-One rule shapes every change: the package is **framework-neutral and dependency-free**. The wire
+One rule shapes every change: `InspectorKit` is **framework-neutral and dependency-free**. The wire
 protocol is four operations (`hello`, `catalog`, `state`, `send`), and actions are catalog
 data: a new action never needs CLI code or a new message type. A framework integration is another
 `Inspectable` conformer outside this package, never a special case inside it
@@ -45,7 +45,8 @@ Every public symbol has a `///` comment; the DocC build must stay free of warnin
 - Swift tools 6.3, every target on the `.standard` concurrency profile in `Package.swift`.
 - Platforms iOS 18 and macOS 26. Only `BonjourTransport` and `serve(app:)` need iOS 26, gated with
   `@available(iOS 26, macOS 26, *)`.
-- No dependencies, including the swift-docc-plugin.
+- No dependencies in `InspectorKit`, including the swift-docc-plugin; the `inspector` CLI target
+  alone uses swift-argument-parser, at a released version.
 - Code, comments and docs in English.
 - No `tca` or other framework names in code or comments. The README names TCA once, as a future
   integration.
