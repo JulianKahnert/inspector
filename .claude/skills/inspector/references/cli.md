@@ -22,7 +22,42 @@ the CLI never gives up before the app.
 | `send <path> <json>` | Runs an action with a payload |
 | `send <path> [json] --until <match> [--timeout s]` | Runs the action, then answers once the state contains the match |
 | `wait <match> [--timeout s]` | The whole state document, once it contains the match |
+| `init [--warm] [--reset] [--workspace path]` | `{"config","hello","state"}`: builds, installs and starts the app through Xcode, writes `.inspector/config.json` and reads the first observation (see *Init* below) |
 | `end` | `{"session","xcode"}`: ends the Xcode session in `.inspector/config.json`; the app that session started ends with it. `xcode` is Xcode's answer, `{"userMessage":"Session doesn't exist anymore"}` for a session that already ended |
+
+## Init
+
+Run `scripts/inspector.sh init` from the app's repository. It ends once `state` answered, and its answer carries that whole state.
+
+- **Cold** (the default; after every code change): starts Xcode with `xed -b` when it is not running, opens the repository's workspace, ends the session the old `config.json` names, starts a new one, builds, installs and starts the app with the active scheme, then reads `hello` and `state`. It takes the build time plus a few seconds; with the build up to date about 11 s.
+- **Warm** (`--warm`; you decide that no code changed since the last run): only `hello` and `state` of the app that serves, well under a second, no build, the session untouched. It finds only an app that runs outside a session, for example after `xcrun simctl launch <udid> <bundleId>` of the installed build, because the app of an expired session is gone.
+- **`--reset`** uninstalls the app before the install, which deletes its data. Use it only when the task needs a fresh app; init never logs in.
+- **`--app <name>`** picks the app when several serve, and the scheme to build when the workspace has a scheme of that name. **`--workspace <path>`** picks the workspace when the repository has several.
+- `config.json` gets every field, `instance` being the full name `hello` reported; `.inspector/` goes into `.git/info/exclude` when nothing ignores it yet.
+
+| What happened | `code` | Next step |
+|---|---|---|
+| `--warm`, but the app does not serve | `APP_NOT_FOUND` or `TIMEOUT` | `init` without `--warm` |
+| The build failed | `XCODE_ERROR`, `message` quotes Xcode's build output | Fix the code, `init` again |
+| The app started but does not serve | `APP_NOT_FOUND` or `TIMEOUT` | Check that the debug build calls `serve()`; with several apps pass `--app` |
+| Xcode has not approved the binary | `NOT_APPROVED` | Stop; a human confirms Xcode's dialog, then `init` again |
+| The selected Xcode has no `mcpbridge` | `XCODE_TOO_OLD` | Stop; a human selects Xcode 27.2 or newer |
+| The device is in another session, or another Xcode error | `XCODE_ERROR` | Read `message`; a session of your own: `scripts/inspector.sh end`, then `init` |
+| No workspace, or several | `BAD_REQUEST` | `--workspace <path>` |
+
+### Without Xcode
+
+When Xcode cannot run the build, build and start the app yourself. This path has no session, so no gestures and no `end`:
+
+```sh
+xcodebuild -project App/RoommateAlbert.xcodeproj -scheme RoommateAlbert \
+  -destination "id=$UDID" -derivedDataPath "${TMPDIR}inspector-build" build
+xcrun simctl install "$UDID" "${TMPDIR}inspector-build/Build/Products/Debug-iphonesimulator/RoommateAlbert.app"
+xcrun simctl launch "$UDID" de.juliankahnert.RoommateAlbert
+scripts/inspector.sh init --warm --app RoommateAlbert
+```
+
+Take the project, scheme and app name from the repository, and the bundle ID from `xcodebuild -showBuildSettings`. `init --warm` then binds the calls to the app; `logs.sh` needs `udid` and `logSubsystem` in `config.json`, which only a cold init writes.
 
 ## `state` and paths
 
@@ -78,7 +113,7 @@ string), `optional` (`of`), `array` (`of`), `enum` (`values`: pass one of them a
 | `AMBIGUOUS_APP` | Several apps serve and no `--app` picks one. `detail` lists their instance names | Repeat the call with `--app <name>` |
 | `TIMEOUT` | The app was found but did not answer in time | Check that the app is still running and not stopped in the debugger |
 | `EXPECTATION_FAILED` | The condition did not hold before `--timeout`. `detail` is the last state as a JSON string | Read it with `jq -r .detail \| jq`; then logs or a screenshot explain why |
-| `NO_CONFIG` | The call needs `.inspector/` and there is none, or `INSPECTOR_DIR` names nothing. `detail` is the expected path | Create the folder there, or fix `INSPECTOR_DIR` |
+| `NO_CONFIG` | The call needs `.inspector/` and there is none, or `INSPECTOR_DIR` names nothing. `detail` is the expected path | `scripts/inspector.sh init`, or fix `INSPECTOR_DIR` |
 | `ENV_MISSING` | A `${NAME}` in the payload has no value in `.inspector/.env`. `detail` lists the names | Add them to `.inspector/.env`; nothing was sent |
 | `NOT_APPROVED` | Xcode has not approved this binary for its tools | Stop and ask the human to confirm Xcode's approval dialog; do not retry |
 | `NO_SESSION` | `config.json` names no session, or the session ended and its app with it | `inspector init` |
