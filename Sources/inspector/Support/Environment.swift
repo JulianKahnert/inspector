@@ -115,6 +115,39 @@ struct Environment: Sendable {
     }
   }
 
+  /// The `hello` of the app `app` selects.
+  ///
+  /// - Throws: the same errors as ``answer(to:from:)``.
+  func hello(from app: String?) async throws(InspectorError) -> Hello {
+    guard case .hello(let hello) = try await response(to: .hello, from: app) else { throw Self.unexpected("hello") }
+    return hello
+  }
+
+  /// The whole state of the app `app` selects.
+  ///
+  /// - Throws: the same errors as ``answer(to:from:)``.
+  func state(from app: String?) async throws(InspectorError) -> JSONValue {
+    guard case .state(let state) = try await response(to: .state(path: nil), from: app) else {
+      throw Self.unexpected("state")
+    }
+    return state
+  }
+
+  /// The app's answer once its state contains `request`'s match.
+  ///
+  /// - Throws: the same errors as ``answer(to:from:)``, such as ``ErrorCode/expectationFailed``
+  ///   with the last state in `detail`.
+  func wait(_ request: WaitRequest, from app: String?) async throws(InspectorError) -> SendResult {
+    guard case .sendResult(let result) = try await response(to: .wait(request), from: app) else {
+      throw Self.unexpected("wait")
+    }
+    return result
+  }
+
+  private static func unexpected(_ operation: String) -> InspectorError {
+    InspectorError(code: .badRequest, message: "unexpected answer to \(operation)")
+  }
+
   /// Sends `request` to the app `app` selects and returns its response, for a command that
   /// prints only part of it.
   ///

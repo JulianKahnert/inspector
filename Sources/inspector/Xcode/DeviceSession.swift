@@ -32,7 +32,7 @@ struct DeviceSession {
   ///
   /// - Throws: Xcode's error as it is. A session that already ended is no error to Xcode.
   func end(on xcode: XcodeBridge) async throws(InspectorError) -> ToolResult {
-    try await xcode.call(SessionTool.endSession.rawValue, [SessionTool.endSession.sessionParameter: .string(name)])
+    try await xcode.call(.endSession, [SessionTool.endSession.sessionParameter: .string(name)])
   }
 
   /// Calls `tool` in the session.
@@ -47,12 +47,12 @@ struct DeviceSession {
     on xcode: XcodeBridge, in environment: Environment
   ) async throws(InspectorError) -> ToolResult {
     do throws(InspectorError) {
-      return try await xcode.call(tool.rawValue, inSession(arguments, for: tool), timeout: timeout)
+      return try await xcode.call(tool.tool, inSession(arguments, for: tool), timeout: timeout)
     } catch where Self.isSessionNotFound(error) {
       try await restart(after: error, on: xcode, in: environment)
     }
     do throws(InspectorError) {
-      return try await xcode.call(tool.rawValue, inSession(arguments, for: tool), timeout: timeout)
+      return try await xcode.call(tool.tool, inSession(arguments, for: tool), timeout: timeout)
     } catch where Self.isSessionNotFound(error) {
       throw noSession(error)
     }
@@ -76,7 +76,7 @@ struct DeviceSession {
     var arguments: [String: JSONValue] = ["sessionIdentifier": .string(name), "workspaceIdentifier": .string(workspace)]
     if let device { arguments["deviceIdentifier"] = .string(device) }
     // Booting a simulator for the session can take a while.
-    let started = try await xcode.call("DeviceInteractionStartWorkspaceSession", arguments, timeout: .seconds(120))
+    let started = try await xcode.call(.startSession, arguments, timeout: .seconds(120))
     return started.json.objectValue?["deviceUUID"]?.stringValue ?? device
   }
 
@@ -136,10 +136,19 @@ struct DeviceSession {
 }
 
 /// Xcode's device interaction tools that act in a session.
-enum SessionTool: String, Sendable {
-  case synthesize = "DeviceInteractionSynthesize"
-  case installAndRun = "DeviceInteractionInstallAndRun"
-  case endSession = "DeviceInteractionEndSession"
+enum SessionTool: Sendable {
+  case synthesize
+  case installAndRun
+  case endSession
+
+  /// The tool as the bridge calls it.
+  var tool: XcodeTool {
+    switch self {
+    case .synthesize: .synthesize
+    case .installAndRun: .installAndRun
+    case .endSession: .endSession
+    }
+  }
 
   /// The parameter that takes the session's name; `Synthesize` spells it differently.
   var sessionParameter: String {

@@ -28,16 +28,24 @@ struct TapCommand: InspectorCommand {
   @Argument(help: "The y coordinate, in points.")
   var y: Double?
 
-  func validate() throws {
+  private static let usage = "Expected either <x> <y> or --target <name>"
+
+  /// The tap the arguments name, or `nil` for neither or both of a point and a target.
+  private var gesture: Gesture? {
     switch (x, y, target) {
-    case (.some, .some, nil), (nil, nil, .some): return
-    default: throw ValidationError("Expected either <x> <y> or --target <name>")
+    case (let x?, let y?, nil): .tap(Point(x: x, y: y))
+    case (nil, nil, let name?): .tapTarget(name)
+    default: nil
     }
   }
 
+  func validate() throws {
+    guard gesture != nil else { throw ValidationError(Self.usage) }
+  }
+
   func answer(in environment: Environment) async throws(InspectorError) -> any Encodable {
-    var gesture = Gesture.tapTarget(target ?? "")
-    if let x, let y { gesture = .tap(Point(x: x, y: y)) }
-    return try await gesture.perform(until: condition, app: options.app, in: environment)
+    // `validate()` has rejected every other combination before this runs.
+    guard let gesture else { throw InspectorError(code: .badRequest, message: Self.usage) }
+    return try await gesture.perform(until: condition.request, app: options.app, in: environment)
   }
 }

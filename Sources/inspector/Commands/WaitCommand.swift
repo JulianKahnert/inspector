@@ -26,10 +26,6 @@ struct WaitCommand: InspectorCommand {
   @OptionGroup var timeout: ConditionTimeoutOption
 
   func answer(in environment: Environment) async throws(InspectorError) -> any Encodable {
-    let request = WaitRequest(until: match.value, timeoutMs: timeout.timeoutMs)
-    guard case .sendResult(let result) = try await environment.response(to: .wait(request), from: options.app) else {
-      throw InspectorError(code: .badRequest, message: "unexpected answer to wait")
-    }
-    return result.state
+    try await environment.wait(WaitRequest(until: match.value, timeoutMs: timeout.timeoutMs), from: options.app).state
   }
 }

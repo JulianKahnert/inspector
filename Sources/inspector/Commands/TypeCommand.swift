@@ -32,6 +32,6 @@ struct TypeCommand: InspectorCommand {
   func answer(in environment: Environment) async throws(InspectorError) -> any Encodable {
     let raw = text[0]
     let filled = Placeholders.fill(raw, from: try environment.placeholderValues(in: raw))
-    return try await Gesture.type(filled).perform(until: condition, app: options.app, in: environment)
+    return try await Gesture.type(filled).perform(until: condition.request, app: options.app, in: environment)
   }
 }
