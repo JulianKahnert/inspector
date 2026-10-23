@@ -40,6 +40,10 @@ swift run inspector wait '{"counter":42}' --timeout 1
 bash .claude/skills/inspector/tests/logs-test.sh   # the skill's logs.sh against a fake xcrun
 ```
 
+Commands through Xcode (`end`) need the signed binary: run them through
+`.claude/skills/inspector/scripts/inspector.sh`, which signs after every build; `swift run` and a
+bare `swift build` leave a signature Xcode refuses with `NOT_APPROVED`.
+
 Without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, an app that stops
 answering ends in `TIMEOUT`, a condition that does not hold ends in `EXPECTATION_FAILED`, and with
 several apps serving it needs `--app`, unless an `.inspector/config.json` names the instance

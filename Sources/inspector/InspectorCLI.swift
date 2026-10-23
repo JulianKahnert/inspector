@@ -21,6 +21,7 @@ struct InspectorCLI: AsyncParsableCommand {
       StateCommand.self,
       SendCommand.self,
       WaitCommand.self,
+      EndCommand.self,
     ])
 
   @OptionGroup var options: AppOptions

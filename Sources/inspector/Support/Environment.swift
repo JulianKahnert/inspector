@@ -17,15 +17,26 @@ struct Environment: Sendable {
   /// The `.env` values this call filled in; ``InspectorCLI/outcome(of:in:)`` starts each call
   /// with none.
   var substitutions = Substitutions()
+  /// Starts a bridge to Xcode's tools; see ``XcodeBridge``.
+  var launchBridge: @Sendable () throws(InspectorError) -> any BridgeProcess = {
+    throw InspectorError(code: .xcodeError, message: "this environment has no Xcode")
+  }
 
-  /// The apps on the network, found through Bonjour, from the process's working directory.
+  /// The apps on the network, found through Bonjour, and Xcode through `xcrun mcpbridge`, from the
+  /// process's working directory.
   static var live: Environment {
     Environment(
       transport: { BonjourTransport(name: $0) },
       instanceNames: { try await BonjourTransport.instanceNames(browsingFor: $0) },
       workingDirectory: URL(filePath: FileManager.default.currentDirectoryPath, directoryHint: .isDirectory),
       inspectorDirectory: ProcessInfo.processInfo.environment["INSPECTOR_DIR"],
-      now: { Date() })
+      now: { Date() },
+      launchBridge: { () throws(InspectorError) in try BridgeSubprocess() })
+  }
+
+  /// Runs `body` with a fresh connection to Xcode's tools, closed when `body` returns.
+  func withXcode<T>(_ body: (XcodeBridge) async throws(InspectorError) -> T) async throws(InspectorError) -> T {
+    try await XcodeBridge.connect(launch: launchBridge, body)
   }
 
   /// The value in `.inspector/.env` of every `${NAME}` in `text`, by name; empty when `text` has
