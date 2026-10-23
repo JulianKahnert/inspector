@@ -22,6 +22,7 @@ struct InspectorCLI: AsyncParsableCommand {
       SendCommand.self,
       WaitCommand.self,
       CaptureCommand.self,
+      InitCommand.self,
       EndCommand.self,
     ])
 
@@ -62,11 +63,13 @@ struct InspectorCLI: AsyncParsableCommand {
     var folder: InspectorFolder?
     let outcome: Outcome
     do throws(InspectorError) {
-      if type(of: command).isLoopStep { folder = try environment.folder() }
+      if type(of: command).isLoopStep, !type(of: command).createsFolder { folder = try environment.folder() }
       outcome = .answer(substitutions.mask(answer: try await command.answer(in: environment)))
     } catch {
       outcome = .failure(substitutions.mask(error))
     }
+    // `init` creates the folder; its step belongs in it like any other.
+    if folder == nil, type(of: command).isLoopStep { folder = try? environment.folder() }
     // The step happened whether or not run.json can be written; failing now would hide its answer.
     try? folder?.recordStep(
       command: type(of: command).configuration.commandName ?? "", arguments: arguments.map(substitutions.mask),
