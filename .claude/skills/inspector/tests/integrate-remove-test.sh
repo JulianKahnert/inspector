@@ -480,6 +480,39 @@ test_remove_keeps_the_exclude_entry_while_another_worktree_is_integrated() {
   ! grep -q -v '^#' "$tmp/app/.git/info/exclude" || fail "exclude entry left behind"
 }
 
+# init_binding <repo>: what `inspector init` leaves: its marked exclude entry and `.inspector/`.
+init_binding() {
+  local exclude
+  exclude="$(git -C "$1" rev-parse --path-format=absolute --git-path info/exclude)"
+  mkdir -p "$1/.inspector"
+  printf '{"session":"inspector-app-1"}\n' >"$1/.inspector/config.json"
+  printf '# DEBUG INSPECTOR\n/.inspector/\n' >>"$exclude"
+}
+
+test_round_trip_after_init_leaves_no_exclude_entry() {
+  make_app "$tmp/app"
+  init_binding "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_status 0
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  expect_clean_tree "$tmp/app"
+  expect_not_contains 'inspector' "$(cat "$tmp/app/.git/info/exclude")"
+}
+
+test_remove_keeps_the_exclude_entry_while_another_worktree_has_a_session() {
+  make_app "$tmp/app"
+  git -C "$tmp/app" worktree add -q -b other "$tmp/app-other"
+  init_binding "$tmp/app-other"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  expect_contains 'kept the .inspector/ exclude entry' "$out"
+  expect_not_contains '.inspector' "$(git -C "$tmp/app-other" status --porcelain)"
+}
+
 # MARK: - Runner
 
 tests=()

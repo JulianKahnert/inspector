@@ -88,7 +88,8 @@ struct InitCommandTests {
             arguments: ["interactionSessionKey": "inspector-app-20261019-085320", "workspaceIdentifier": "workspace-1"]),
         ])
       #expect(try sandbox.json("app/.inspector/config.json") == (try JSONDecoder().decode(JSONValue.self, from: Data(config.utf8))))
-      #expect(sandbox.read("app/.git/info/exclude") == "/.inspector/\n")
+      // Marked like integrate.sh's entry, so remove.sh takes it out again.
+      #expect(sandbox.read("app/.git/info/exclude") == "# DEBUG INSPECTOR\n/.inspector/\n")
     }
   }
 
@@ -269,6 +270,25 @@ struct InitCommandTests {
       #expect(xcode.calls.map(\.tool) == ["XcodeOpenWorkspace"])
       #expect(sandbox.read("app/.inspector/config.json") == nil)
     }
+  }
+
+  @Test("an Xcode that does not open the workspace in time ends in TIMEOUT with init again as the agent's step")
+  func openWorkspaceTimeout() async throws {
+    let xcode = FakeXcode { _ in .silence }
+
+    let error = await #expect(throws: InspectorError.self) {
+      try await XcodeBridge.connect(launch: xcode.launch) { bridge throws(InspectorError) in
+        try await InitCommand.openWorkspace("/app/Demo.xcodeproj", on: bridge, timeout: .milliseconds(20))
+      }
+    }
+
+    #expect(
+      error
+        == InspectorError(
+          code: .timeout,
+          message:
+            "Xcode did not open the workspace within 0.02 s; a starting Xcode can take a minute, run `inspector init` again",
+          detail: "Xcode did not answer `XcodeOpenWorkspace` within 0.02 s"))
   }
 
   @Test("init on an Xcode without mcpbridge ends in XCODE_TOO_OLD")

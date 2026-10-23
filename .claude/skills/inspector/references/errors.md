@@ -13,13 +13,15 @@ changes nothing.
 | `code` | Situation | Who | Next step |
 |---|---|---|---|
 | `APP_NOT_FOUND` | No `.inspector/` yet, or no debug build serves | Agent | `scripts/inspector.sh init` in the app's repository; an app it cannot start (Mac app, physical device): ask the user to start the debug build |
-| `APP_NOT_FOUND` | Right after a cold `init` started the app | Agent | Check that the debug build calls `DebugInspector.start(root:)` and has both `Info.plist` keys (`references/integration.md`), then `scripts/logs.sh` |
+| `APP_NOT_FOUND` | Right after a cold `init` started the app, and the repository has no `DebugInspector.swift` | Agent | Integrate it ([SKILL.md, Integrating](../SKILL.md#integrating)), then cold `init` |
+| `APP_NOT_FOUND` | Right after a cold `init` started the app, and the repository has a `DebugInspector.swift` | Agent | Check that the debug build calls `DebugInspector.start(root:)` and has both `Info.plist` keys (`references/integration.md`), then `scripts/logs.sh` |
 | `APP_NOT_FOUND`, `TIMEOUT` | After `init --warm` | Agent | `init` without `--warm` |
 | `APP_NOT_FOUND` | With `--app <name>` | Agent | `scripts/inspector.sh apps`, then the full `name` it lists |
 | `AMBIGUOUS_APP` | Several apps serve, none picked | Agent | Repeat with `--app` and one full name from `detail` |
 | `TIMEOUT` | `hello`, `state` or `send` found the app, which did not answer | Agent | Cold `init`: an app that was terminated leaves a Bonjour record behind for a while, which answers `TIMEOUT` instead of `APP_NOT_FOUND` |
 | `TIMEOUT` | Again right after a cold `init` | Human | The app sits at a breakpoint: continue it in Xcode's debugger |
 | `TIMEOUT` | From a command through Xcode: the bridge or a tool did not answer | Agent | `pgrep -x Xcode`; when Xcode is not running, `init` starts it |
+| `TIMEOUT` | From `init`: Xcode did not open the workspace within 90 s | Agent | `init` again; a starting Xcode can take a minute |
 
 ## State and actions
 
@@ -40,7 +42,7 @@ changes nothing.
 | `code` | Situation | Who | Next step |
 |---|---|---|---|
 | `NO_CONFIG` | No `.inspector/` from here up to the repository root, `INSPECTOR_DIR` names nothing, or (from `logs.sh`) `config.json` lacks `udid` or `logSubsystem`; `detail` is the path expected | Agent | Cold `scripts/inspector.sh init` in the app's repository, or fix `INSPECTOR_DIR` |
-| `NO_SESSION` | `config.json` names no session, or the session expired and its app with it | Agent | Cold `init` |
+| `NO_SESSION` | `config.json` names no session, the session expired and its app with it, or a gesture with `--until` found its app not answering | Agent | Cold `init` |
 | `BAD_REQUEST` | From `logs.sh`: no `lastStep` in `run.json` | Agent | `scripts/logs.sh --since <seconds>` |
 | `BAD_REQUEST` | From `logs.sh`: `log show` failed; `detail` is simctl's message | Agent | Cold `init` (the simulator in `config.json` is shut down or gone) |
 
@@ -78,5 +80,6 @@ stderr, exits 1 on failure with the manifest restored, and 2 on a usage error.
 | `PACKAGE_NOT_FOUND`, `PLIST_NOT_FOUND` | Agent | Fix the path |
 | `PLIST_INVALID` | Agent | `plutil -convert xml1 <plist>`, then `integrate.sh` again |
 | `INTEGRATION_LEFT` | Agent | `scripts/remove.sh`; a `diff` or `tracked` finding in a commit: change that commit |
+| `INTEGRATION_LEFT` with a `resolved` finding: a build or `swift run` added InspectorKit's pins to a `Package.resolved` | Agent | `scripts/remove.sh`, which puts the file back as it was; never commit the pins |
 | `BASE_NOT_FOUND` | Agent | `--base <branch>` |
 | `NOT_A_REPO`, `NOT_AN_APP_REPO` | Agent | Pass an app's checkout, not a plain folder or the inspector repository |

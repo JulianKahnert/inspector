@@ -11,7 +11,7 @@ struct XcodeBridgeTests {
     let xcode = FakeXcode { _ in .text("Session stopped") }
 
     let result = try await XcodeBridge.connect(launch: xcode.launch) { bridge throws(InspectorError) in
-      try await bridge.call("DeviceInteractionEndSession", ["interactionSessionKey": "s1"])
+      try await bridge.call(.endSession, ["interactionSessionKey": "s1"])
     }
 
     #expect(result == ToolResult(text: "Session stopped"))
@@ -33,7 +33,7 @@ struct XcodeBridgeTests {
 
     let error = await #expect(throws: InspectorError.self) {
       try await XcodeBridge.connect(launch: xcode.launch) { bridge throws(InspectorError) in
-        try await bridge.call("DeviceInteractionEndSession", [:])
+        try await bridge.call(.endSession, [:])
       }
     }
 
@@ -54,7 +54,7 @@ struct XcodeBridgeTests {
 
     let error = await #expect(throws: InspectorError.self) {
       try await XcodeBridge.connect(launch: xcode.launch) { bridge throws(InspectorError) in
-        try await bridge.call("DeviceInteractionEndSession", [:])
+        try await bridge.call(.endSession, [:])
       }
     }
 
@@ -71,7 +71,7 @@ struct XcodeBridgeTests {
 
     let error = await #expect(throws: InspectorError.self) {
       try await XcodeBridge.connect(launch: xcode.launch) { bridge throws(InspectorError) in
-        try await bridge.call("DeviceInteractionSynthesize", [:], timeout: .milliseconds(20))
+        try await bridge.call(.synthesize, [:], timeout: .milliseconds(20))
       }
     }
 
@@ -86,7 +86,7 @@ struct XcodeBridgeTests {
 
     let error = await #expect(throws: InspectorError.self) {
       try await XcodeBridge.connect(launch: { bridge }, initializeTimeout: .milliseconds(20)) {
-        bridge throws(InspectorError) in try await bridge.call("XcodeListWindows", [:])
+        bridge throws(InspectorError) in try await bridge.call(.listTargets, [:])
       }
     }
 
@@ -103,7 +103,7 @@ struct XcodeBridgeTests {
   func exitedEarly(stderr: String, code: ErrorCode) async throws {
     let error = await #expect(throws: InspectorError.self) {
       try await XcodeBridge.connect(launch: { FakeBridge.exited(stderr: stderr) }) { bridge throws(InspectorError) in
-        try await bridge.call("XcodeListWindows", [:])
+        try await bridge.call(.listTargets, [:])
       }
     }
 

@@ -38,7 +38,7 @@ func echoApp() async throws -> Environment {
   let inspector = Inspector()
   inspector.state("received") { received.withLock { $0 } }
   inspector.state("motto") { "the answer is 42" }
-  inspector.action("login") { (payload: JSONValue) in received.withLock { $0 = payload } }
+  inspector.action("submit") { (payload: JSONValue) in received.withLock { $0 = payload } }
   inspector.action("reject") { (text: String) in
     throw InspectorError(code: .badRequest, message: "rejected `\(text)`", detail: text, didYouMean: [text])
   }

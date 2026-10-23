@@ -50,18 +50,26 @@ private func listApps(in environment: Environment) async throws -> [AppListing] 
 }
 
 /// `nil` when the app does not answer within 2 seconds; a silent app is a result here, not a failure.
+///
+/// The ask is cancelled and left behind, never awaited: a Network connection may not end on
+/// cancellation, and a task group would wait for it past the 2 seconds.
 private func helloOrNil(from transport: any InspectorTransport) async -> Hello? {
-  await withTaskGroup(of: Hello?.self) { group in
-    group.addTask {
-      guard case .hello(let hello) = try? await transport.send(.hello) else { return nil }
-      return hello
+  let (first, settle) = AsyncStream.makeStream(of: Hello?.self, bufferingPolicy: .bufferingOldest(1))
+  let ask = Task {
+    if case .hello(let hello) = try? await transport.send(.hello) {
+      settle.yield(hello)
+    } else {
+      settle.yield(nil)
     }
-    group.addTask {
-      try? await Task.sleep(for: .seconds(2))
-      return nil
-    }
-    let first = await group.next() ?? nil
-    group.cancelAll()
-    return first
   }
+  let timer = Task {
+    try? await Task.sleep(for: .seconds(2))
+    settle.yield(nil)
+  }
+  defer {
+    ask.cancel()
+    timer.cancel()
+  }
+  for await hello in first { return hello }
+  return nil
 }

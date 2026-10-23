@@ -55,6 +55,11 @@ struct UntilOptions: ParsableArguments {
   /// The match document, or `nil` without `--until`.
   var match: JSONValue? { until?.value }
 
+  /// The wait the options ask for, or `nil` without `--until`.
+  var request: WaitRequest? {
+    match.map { WaitRequest(until: $0, timeoutMs: timeout.timeoutMs) }
+  }
+
   func validate() throws {
     guard until == nil, timeout.timeout != nil else { return }
     throw ValidationError("--timeout needs --until")
