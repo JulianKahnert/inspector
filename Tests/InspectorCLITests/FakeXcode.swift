@@ -24,7 +24,7 @@ final class FakeXcode: Sendable {
     var arguments: [String: JSONValue]
   }
 
-  private let reply: @Sendable (Call) -> Reply
+  let reply: @Sendable (Call) -> Reply
   private let bridges = Mutex<[FakeBridge]>([])
 
   init(reply: @escaping @Sendable (Call) -> Reply) {

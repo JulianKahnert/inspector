@@ -164,21 +164,23 @@ $ cat .inspector/run.json
 }
 ```
 
-- **`config.json`** binds the calls to an app and, later, a simulator and an Xcode session: `app`, `instance`, `bundleId`, `udid`, `session`, `workspace`, `scheme`, `logSubsystem`, `writtenAt`. Only `inspector init` writes it; `instance` is the default for `--app`, and `--app` wins.
+- **`config.json`** binds the calls to an app, a simulator and an Xcode session: `app`, `instance`, `bundleId`, `udid`, `session`, `workspace`, `scheme`, `logSubsystem`, `writtenAt`. Only `inspector init` writes it; `instance` is the default for `--app`, and `--app` wins.
 - **`run.json`** holds what the last calls did: `lastStep` with the command, its arguments and when it started. Each command replaces only its own fields.
 - **`.env`** holds `NAME=value` lines. `send` fills each `${NAME}` in its payload from there and fails with `ENV_MISSING` before sending when a name has no value; `${NAME}` without a folder fails with `NO_CONFIG`, whose `detail` is where the folder was expected.
 - **Masking**: A value filled in from `.env` shows as `${NAME}` in the answer, in an error and in `run.json`, wherever it appears, also where the state holds it for another reason; a number equal to it becomes the string `"${NAME}"`. Nothing else is masked, whatever its key is called.
-- **Git**: Never commit the folder. List `.inspector/` in `.gitignore` when the integration stays in the repository, or in `.git/info/exclude` when it is added only for a debugging session.
+- **Git**: Never commit the folder. List `.inspector/` in `.gitignore` when the integration stays in the repository, or in `.git/info/exclude` when it is added only for a debugging session. `inspector init` adds the exclude entry itself when nothing ignores the folder yet.
 
 The rules per command are in [ADR 004](docs/adr/004-cli.md#the-inspector-folder).
 
 ### Commands through Xcode
 
-`inspector end` ends the Xcode device interaction session `config.json` names, and the app that session started with it. Such commands call Xcode's tools through `xcrun mcpbridge`, one short-lived bridge per call, and Xcode serves them only once a human approved the binary in Xcode's dialog. Xcode recognizes the binary by its signature, so run it through the skill's `scripts/inspector.sh`, which signs every build with your "Apple Development" identity and the identifier `de.juliankahnert.inspector`; a plain `swift build` leaves a signature Xcode refuses.
+`inspector init`, run in the app's repository, builds, installs and starts the app through Xcode in a new device interaction session, then answers with the `config.json` it wrote, `hello` and the whole `state`. It starts Xcode when it is not running and opens the repository's workspace. `--warm` skips Xcode and only reads an app that already serves, for when no code changed; `--reset` uninstalls the app first, which deletes its data. `inspector end` ends the session `config.json` names, and the app that session started with it. Such commands call Xcode's tools through `xcrun mcpbridge`, one short-lived bridge per call, and Xcode serves them only once a human approved the binary in Xcode's dialog. Xcode recognizes the binary by its signature, so run it through the skill's `scripts/inspector.sh`, which signs every build with your "Apple Development" identity and the identifier `de.juliankahnert.inspector`; a plain `swift build` leaves a signature Xcode refuses.
 
 ```console
+$ scripts/inspector.sh init | jq -c .config      # from the app's repository
+{"app":"RoommateAlbert","bundleId":"de.juliankahnert.RoommateAlbert","instance":"RoommateAlbert @ <host>","logSubsystem":"de.juliankahnert.","scheme":"RoommateAlbert","session":"inspector-RoommateAlbert-20260101-132548","udid":"6D1A3C55-2B8E-4F1A-9C77-0E5B2A4D8F10","workspace":"workspace-Xy12AbC3dE","writtenAt":"2026-10-23T13:26:00Z"}
 $ scripts/inspector.sh end
-{"session":"inspector-RoommateAlbert-20260101-130420","xcode":{"userMessage":"Session stopped"}}
+{"session":"inspector-RoommateAlbert-20260101-132548","xcode":{"userMessage":"Session stopped"}}
 ```
 
 `inspector capture` captures the simulator's screen in the same session and answers with the paths of the screenshot and the hierarchy Xcode wrote, plus `targets`: the controls on the screen with their `type`, `identifier`, `label`, `placeholder` and `value` where the hierarchy names them, and the `hitPoint` a tap goes to, as `[x, y]` in points. An agent reads `targets`, about 1 KB for a busy screen, instead of the 5 to 25 KB hierarchy; a typed field value shows up there even when the app's state does not hold it. The paths also go to `run.json` as `lastHierarchy` and `lastScreenshot`.
@@ -188,7 +190,7 @@ $ scripts/inspector.sh capture | jq -c '.targets[] | select(.label == "Stand ein
 {"hitPoint":[363.3,84],"label":"Stand eintragen","type":"Button"}
 ```
 
-A refused binary ends in `NOT_APPROVED`, an ended session whose app is gone in `NO_SESSION`, a capture without a hierarchy in `NO_HIERARCHY`; [ADR 004](docs/adr/004-cli.md#commands-through-xcode) has every code and the session restart.
+A refused binary ends in `NOT_APPROVED`, an ended session whose app is gone in `NO_SESSION`, a capture without a hierarchy in `NO_HIERARCHY`; [ADR 004](docs/adr/004-cli.md#commands-through-xcode) has every code, the steps of `init` and the session restart.
 
 ## Debugging a running app with an agent
 
