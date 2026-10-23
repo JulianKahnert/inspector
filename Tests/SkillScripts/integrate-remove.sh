@@ -40,7 +40,10 @@ let package = Package(
     name: "App",
     platforms: [.macOS(.v26)],
     targets: [
-        .executableTarget(name: "App", exclude: ["Info.plist"]),
+        .executableTarget(
+            name: "App",
+            exclude: ["Info.plist"]
+        ),
     ]
 )
 EOF
@@ -220,6 +223,262 @@ test_check_rejects_an_unknown_option_as_usage() {
   run "$scripts/remove.sh" --frobnicate
   expect_status 64
   expect_contains 'Usage:' "$err"
+}
+
+# MARK: - integrate.sh
+
+test_integrate_places_the_store_file_at_the_path_it_has_in_the_store() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App 'VALUE=42'
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_status 0
+  cmp -s "$tmp/store/app/Sources/App/DebugInspector.swift" "$tmp/app/Sources/App/DebugInspector.swift" ||
+    fail "DebugInspector.swift is not the store's"
+  expect_contains '"file":"Sources/App/DebugInspector.swift"' "$out"
+  expect_contains '"target":"App"' "$out"
+}
+
+test_integrate_adds_the_dependency_marked() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_status 0
+  expect_contains '"dependency":"Package.swift"' "$out"
+  expect_contains '.product(name: "InspectorKit"' "$(grep 'DEBUG INSPECTOR' "$tmp/app/Package.swift")"
+  expect_contains '.package(path:' "$(grep 'DEBUG INSPECTOR' "$tmp/app/Package.swift")"
+}
+
+test_integrate_adds_the_two_plist_keys_marked() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_status 0
+  local plist="$tmp/app/Sources/App/Info.plist"
+  expect_contains '"plist":"Sources/App/Info.plist"' "$out"
+  plutil -lint -s "$plist" || fail "Info.plist does not lint"
+  [[ "$(plutil -extract NSBonjourServices.0 raw "$plist")" == "_inspector._tcp" ]] || fail "no _inspector._tcp"
+  plutil -extract NSLocalNetworkUsageDescription raw "$plist" >/dev/null || fail "no usage description"
+  [[ "$(grep -c '<!-- DEBUG INSPECTOR -->' "$plist")" == 2 ]] || fail "expected two plist markers"
+}
+
+test_integrate_adds_to_an_existing_bonjour_list() {
+  make_app "$tmp/app"
+  local plist="$tmp/app/Sources/App/Info.plist"
+  perl -0pi -e 's{</dict>\n</plist>}{\t<key>NSBonjourServices</key>\n\t<array>\n\t\t<string>_other._tcp</string>\n\t</array>\n</dict>\n</plist>}' "$plist"
+  git -C "$tmp/app" commit -q -am "Use Bonjour"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_status 0
+  plutil -lint -s "$plist" || fail "Info.plist does not lint"
+  [[ "$(plutil -extract NSBonjourServices.0 raw "$plist")" == "_inspector._tcp" ]] || fail "no _inspector._tcp"
+  [[ "$(plutil -extract NSBonjourServices.1 raw "$plist")" == "_other._tcp" ]] || fail "lost _other._tcp"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  expect_clean_tree "$tmp/app"
+}
+
+test_integrate_copies_the_env_and_excludes_the_folder() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App 'VALUE=42'
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_status 0
+  [[ "$(cat "$tmp/app/.inspector/.env")" == "VALUE=42" ]] || fail ".env not copied"
+  expect_contains '"env":".inspector/.env"' "$out"
+  expect_contains '/.inspector/' "$(cat "$tmp/app/.git/info/exclude")"
+  expect_not_contains '.inspector' "$(git -C "$tmp/app" status --porcelain)"
+}
+
+test_integrate_without_from_copies_the_template() {
+  make_app "$tmp/app"
+  run "$scripts/integrate.sh" "$tmp/app" --into Sources/App
+  expect_status 0
+  cmp -s "$scripts/../assets/DebugInspector.swift" "$tmp/app/Sources/App/DebugInspector.swift" ||
+    fail "DebugInspector.swift is not the template"
+  expect_contains '"env":null' "$out"
+}
+
+test_integrate_needs_from_or_into() {
+  make_app "$tmp/app"
+  run "$scripts/integrate.sh" "$tmp/app"
+  expect_status 64
+  expect_contains 'Usage:' "$err"
+}
+
+test_integrate_rejects_a_store_without_the_file() {
+  make_app "$tmp/app"
+  mkdir -p "$tmp/store/app/Sources/App"
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_error STORE_INVALID
+}
+
+test_integrate_rejects_a_store_with_two_files() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  make_store "$tmp/store/app" Sources/Other
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_error STORE_INVALID
+}
+
+test_integrate_rejects_a_target_the_repo_lacks() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/Missing
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_error TARGET_DIR_MISSING
+  expect_clean_tree "$tmp/app"
+}
+
+test_integrate_refuses_a_second_run() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_error ALREADY_INTEGRATED
+}
+
+test_integrate_rolls_back_when_a_step_fails() {
+  make_app "$tmp/app"
+  printf 'not a plist\n' >"$tmp/app/notes.txt"
+  git -C "$tmp/app" add notes.txt
+  git -C "$tmp/app" commit -q -m "Notes"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app" --plist notes.txt
+  expect_error PLIST_INVALID
+  expect_clean_tree "$tmp/app"
+  [[ ! -e "$tmp/app/.inspector" ]] || fail ".inspector/ left behind"
+  expect_not_contains 'inspector' "$(cat "$tmp/app/.git/info/exclude")"
+}
+
+# make_project_app <dir>: an app target in an Xcode project (no manifest above it) and a local
+# wrapper package next to it, the way an app links its packages through one local package.
+make_project_app() {
+  local dir="$1"
+  make_app "$dir"
+  git -C "$dir" mv Package.swift Wrapper.swift
+  mkdir -p "$dir/App.xcodeproj" "$dir/Wrapper/Sources/Wrapper"
+  printf '// !$*UTF8*$!\n{\n\tobjects = {\n\t};\n}\n' >"$dir/App.xcodeproj/project.pbxproj"
+  git -C "$dir" mv Wrapper.swift Wrapper/Package.swift
+  perl -pi -e 's/name: "App",/name: "Wrapper",/g; s/^\s*exclude: \["Info.plist"\]\n//' "$dir/Wrapper/Package.swift"
+  printf 'public enum Wrapper {}\n' >"$dir/Wrapper/Sources/Wrapper/Wrapper.swift"
+  git -C "$dir" add -A
+  git -C "$dir" commit -q -m "Move the app into an Xcode project"
+}
+
+test_integrate_stops_for_a_project_target_with_the_one_manual_step() {
+  make_project_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_error NEEDS_PROJECT_DEPENDENCY
+  expect_contains 'Add Local' "$err"
+  expect_clean_tree "$tmp/app"
+}
+
+test_integrate_goes_through_a_wrapper_package_for_a_project_target() {
+  make_project_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app" --package Wrapper --package-target Wrapper
+  expect_status 0
+  expect_contains '"dependency":"Wrapper/Package.swift"' "$out"
+  expect_contains 'InspectorKit' "$(grep 'DEBUG INSPECTOR' "$tmp/app/Wrapper/Package.swift")"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  expect_clean_tree "$tmp/app"
+}
+
+test_integrate_takes_a_project_dependency_added_by_hand() {
+  make_project_app "$tmp/app"
+  perl -pi -e 's/objects = \{/objects = {\n\t\tAAAA \/* InspectorKit *\/ = {isa = XCSwiftPackageProductDependency; productName = InspectorKit; };/' \
+    "$tmp/app/App.xcodeproj/project.pbxproj"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_status 0
+  expect_contains '"dependency":"App.xcodeproj/project.pbxproj"' "$out"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  expect_clean_tree "$tmp/app"
+}
+
+# MARK: - remove.sh
+
+test_round_trip_leaves_no_diff_and_no_exclude_entry() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App 'VALUE=42'
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_status 0
+  printf 'DebugInspector.start() // DEBUG INSPECTOR\n' >>"$tmp/app/Sources/App/main.swift"
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_error INTEGRATION_LEFT
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  expect_contains '"deleted":["Sources/App/DebugInspector.swift"]' "$out"
+  expect_contains 'Sources/App/main.swift:2' "$out"
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_status 0
+  expect_clean_tree "$tmp/app"
+  [[ ! -e "$tmp/app/.inspector" ]] || fail ".inspector/ left behind"
+  ! grep -q -v '^#' "$tmp/app/.git/info/exclude" || fail "exclude entry left behind"
+}
+
+test_round_trip_builds_against_this_package() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_status 0
+  printf 'DebugInspector.start() // DEBUG INSPECTOR\n' >>"$tmp/app/Sources/App/main.swift"
+  run swift build --package-path "$tmp/app"
+  expect_status 0
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_error INTEGRATION_LEFT
+  expect_contains '"kind":"resolved"' "$err"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_status 0
+  expect_clean_tree "$tmp/app"
+}
+
+test_remove_runs_over_every_repo_below_the_workspace_root() {
+  mkdir "$tmp/workspace"
+  make_app "$tmp/workspace/one"
+  make_app "$tmp/workspace/two"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/workspace/one" --from "$tmp/store/app"
+  run "$scripts/integrate.sh" "$tmp/workspace/two" --from "$tmp/store/app"
+  cd "$tmp/workspace" || return
+  run "$scripts/remove.sh"
+  cd - >/dev/null || return
+  expect_status 0
+  expect_clean_tree "$tmp/workspace/one"
+  expect_clean_tree "$tmp/workspace/two"
+}
+
+test_remove_takes_out_marked_lines_without_a_record() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  printf 'DebugInspector.start() // DEBUG INSPECTOR\n' >>"$tmp/app/Sources/App/main.swift"
+  rm -rf "$tmp/app/.inspector"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  [[ ! -e "$tmp/app/Sources/App/DebugInspector.swift" ]] || fail "file left behind"
+  git -C "$tmp/app" diff --quiet HEAD -- Sources/App/Info.plist Sources/App/main.swift ||
+    fail "Info.plist or main.swift still differ: $(git -C "$tmp/app" diff HEAD)"
+  expect_contains 'no record from integrate.sh' "$out"
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_status 0
+}
+
+test_remove_keeps_the_exclude_entry_while_another_worktree_is_integrated() {
+  make_app "$tmp/app"
+  git -C "$tmp/app" worktree add -q -b other "$tmp/app-other"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  run "$scripts/integrate.sh" "$tmp/app-other" --from "$tmp/store/app"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  expect_not_contains '.inspector' "$(git -C "$tmp/app-other" status --porcelain)"
+  run "$scripts/remove.sh" "$tmp/app-other"
+  expect_clean_tree "$tmp/app-other"
+  ! grep -q -v '^#' "$tmp/app/.git/info/exclude" || fail "exclude entry left behind"
 }
 
 # MARK: - Runner
