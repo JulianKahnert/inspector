@@ -1,0 +1,3 @@
+# The scripts source lib/common.sh; follow it so its variables count as assigned.
+external-sources=true
+source-path=SCRIPTDIR

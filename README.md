@@ -283,6 +283,13 @@ swift run inspector hello            # terminal 2
 swift run inspector send counter.set 42
 ```
 
+The skill's scripts have shell tests in `.claude/skills/inspector/tests/`. The one for `integrate.sh` and `remove.sh` builds throwaway git repositories in a temporary directory and, in one test, a SwiftPM app against this package:
+
+```sh
+bash .claude/skills/inspector/tests/integrate-remove-test.sh              # about 30 s
+bash .claude/skills/inspector/tests/integrate-remove-test.sh --no-build   # skips the build
+```
+
 ## References
 
 - [Native is now the future of mobile at Shopify](https://shopify.engineering/back-to-native) - Shopify Engineering, the inspiration for this package
