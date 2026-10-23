@@ -7,7 +7,8 @@ stderr and exit code 1; branch on `code`, never on `message`. A usage error exit
 after every build, so Xcode keeps serving it (call the CLI through the script, not after a bare
 `swift build`). The CLI bounds every call itself: discovery gives up after 5 s with
 `APP_NOT_FOUND`, and an app that stops answering ends in `TIMEOUT` after 5 s, or after a `send`'s
-settle timeout plus 5 s.
+settle timeout plus 5 s; a condition's timeout (`--timeout`, 3 s by default) is added on top, so
+the CLI never gives up before the app.
 
 ## Commands
 
@@ -19,6 +20,8 @@ settle timeout plus 5 s.
 | `state <path>` | The value at a dotted path inside the state document |
 | `send <path>` | Runs an action that takes no payload |
 | `send <path> <json>` | Runs an action with a payload |
+| `send <path> [json] --until <match> [--timeout s]` | Runs the action, then answers once the state contains the match |
+| `wait <match> [--timeout s]` | The whole state document, once it contains the match |
 | `end` | `{"session","xcode"}`: ends the Xcode session in `.inspector/config.json`; the app that session started ends with it. `xcode` is Xcode's answer, `{"userMessage":"Session doesn't exist anymore"}` for a session that already ended |
 
 ## `state` and paths
@@ -40,12 +43,21 @@ settle timeout plus 5 s.
     after its closure returned.
   - `state` is that after-state.
 - An action that starts a push or presents a sheet returns before the new screen exists, so its
-  `diff` can be empty although the screen opens. Wait for the screen's key with
-  `scripts/wait-state.sh` instead.
+  `diff` can be empty although the screen opens. Name the screen's key instead:
+  `send settings.open --until '{"settings.detail":{}}'` answers once it registered, with the diff
+  against the state before the action.
 - The app side gives an action 5 seconds by default.
 - `${NAME}` in the payload is filled from `.inspector/.env` (see below), for example
   `send session.login '{"user":"${USER}","password":"${SECRET}"}'`. The answer, an error and
   `run.json` show each filled-in value as `${NAME}`, a number equal to one as the string `"${NAME}"`.
+
+## Conditions: `wait` and `--until`
+
+The match is a JSON object the state has to contain: `{}` as a value asks only for the key, an
+array matches as a prefix, a scalar exactly (`1` matches `1.0`), and keys are taken as written
+(`"settings.detail"` is one key). No operators; for `>` or a regex use `scripts/wait-state.sh` with a
+`jq` filter. The app checks the match itself, right after the action, on every registration and
+every 25 ms, so `--until` costs no extra round trips.
 
 ## Payload schemas in the catalog
 
@@ -65,6 +77,7 @@ string), `optional` (`of`), `array` (`of`), `enum` (`values`: pass one of them a
 | `APP_NOT_FOUND` | No serving app within 5 s, or none matches `--app` | Check that a debug build is running and serving, and the name in `inspector apps` |
 | `AMBIGUOUS_APP` | Several apps serve and no `--app` picks one. `detail` lists their instance names | Repeat the call with `--app <name>` |
 | `TIMEOUT` | The app was found but did not answer in time | Check that the app is still running and not stopped in the debugger |
+| `EXPECTATION_FAILED` | The condition did not hold before `--timeout`. `detail` is the last state as a JSON string | Read it with `jq -r .detail \| jq`; then logs or a screenshot explain why |
 | `NO_CONFIG` | The call needs `.inspector/` and there is none, or `INSPECTOR_DIR` names nothing. `detail` is the expected path | Create the folder there, or fix `INSPECTOR_DIR` |
 | `ENV_MISSING` | A `${NAME}` in the payload has no value in `.inspector/.env`. `detail` lists the names | Add them to `.inspector/.env`; nothing was sent |
 | `NOT_APPROVED` | Xcode has not approved this binary for its tools | Stop and ask the human to confirm Xcode's approval dialog; do not retry |
@@ -99,3 +112,31 @@ names it for one call instead. Without it, the commands work as before.
 `scripts/screenshot.sh [file.png] [UDID]` captures the booted iOS simulator at full device
 resolution through `xcrun simctl io <device> screenshot`. With several simulators booted it lists
 them and asks for a UDID. It can't capture a physical device or a Mac app.
+
+## Logs
+
+Logs explain a failure; they never decide whether a step passed. Read them only after a step
+failed: a condition that did not hold, a `hello` that finds no app, or an app that would not
+start.
+
+`scripts/logs.sh [--all] [--since <seconds>]` prints the app's log entries since the last step,
+straight from the simulator's unified log through `xcrun simctl spawn <udid> log show`. It needs no
+Xcode session, so it also works after `simctl launch`.
+
+- **What it reads**: `udid` and `logSubsystem` from `.inspector/config.json`, found the same way
+  the CLI finds the folder (`INSPECTOR_DIR` included). `com.example.app` takes that subsystem and
+  every one below it; a value ending in a dot (`com.example.`) is a prefix.
+- **Window**: from `lastStep.at` in `.inspector/run.json`, the start of the last call.
+  `--since <seconds>` takes the last seconds instead.
+- **Severity**: `error` and `fault`; `--all` adds every other level, `info` and `debug` included.
+- **Output**: `log show --style compact`: a header line, then one line per entry with timestamp,
+  type (`E`, `F`, …), process, `[subsystem:category]` and the message. The header alone means
+  the app logged no error since the step; `--all` then shows what it did log.
+- **Errors**: one JSON line on stderr and exit 1, like the CLI. `NO_CONFIG` for a missing folder or
+  a config without `udid` or `logSubsystem` (`detail` is the expected path); `BAD_REQUEST` for no
+  `lastStep` (pass `--since`), or when `log show` fails, for example on a shut-down simulator
+  (`detail` is simctl's message). A usage error exits with 64.
+
+**Alternative: `GetConsoleOutput`** from Xcode's MCP tools, with `oslogSeverity`, a regex
+`pattern` and `tailLimit`. Use it only in two cases: the Xcode launch session that started the app
+is still alive, or the app runs on a physical device, where `simctl` can't reach.

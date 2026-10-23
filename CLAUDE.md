@@ -35,6 +35,9 @@ swift run inspector --app <name> hello
 swift run inspector catalog
 swift run inspector state [path]
 swift run inspector send counter.set 42
+swift run inspector send counter.set 42 --until '{"counter":42}'
+swift run inspector wait '{"counter":42}' --timeout 1
+bash .claude/skills/inspector/tests/logs-test.sh   # the skill's logs.sh against a fake xcrun
 ```
 
 Commands through Xcode (`end`) need the signed binary: run them through
@@ -42,8 +45,9 @@ Commands through Xcode (`end`) need the signed binary: run them through
 bare `swift build` leave a signature Xcode refuses with `NOT_APPROVED`.
 
 Without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, an app that stops
-answering ends in `TIMEOUT`, and with several apps serving it needs `--app`, unless an
-`.inspector/config.json` names the instance ([The `.inspector/` folder](README.md#the-inspector-folder)).
+answering ends in `TIMEOUT`, a condition that does not hold ends in `EXPECTATION_FAILED`, and with
+several apps serving it needs `--app`, unless an `.inspector/config.json` names the instance
+([The `.inspector/` folder](README.md#the-inspector-folder)).
 What each answer looks like is under [The CLI](README.md#the-cli).
 
 ## Driving a running app to debug it
