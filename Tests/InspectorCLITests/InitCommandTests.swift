@@ -271,6 +271,25 @@ struct InitCommandTests {
     }
   }
 
+  @Test("an Xcode that does not open the workspace in time ends in TIMEOUT with init again as the agent's step")
+  func openWorkspaceTimeout() async throws {
+    let xcode = FakeXcode { _ in .silence }
+
+    let error = await #expect(throws: InspectorError.self) {
+      try await XcodeBridge.connect(launch: xcode.launch) { bridge throws(InspectorError) in
+        try await InitCommand.openWorkspace("/app/Demo.xcodeproj", on: bridge, timeout: .milliseconds(20))
+      }
+    }
+
+    #expect(
+      error
+        == InspectorError(
+          code: .timeout,
+          message:
+            "Xcode did not open the workspace within 0.02 s; a starting Xcode can take a minute, run `inspector init` again",
+          detail: "Xcode did not answer `XcodeOpenWorkspace` within 0.02 s"))
+  }
+
   @Test("init on an Xcode without mcpbridge ends in XCODE_TOO_OLD")
   func xcodeTooOld() async throws {
     try await Sandbox.run { sandbox in
