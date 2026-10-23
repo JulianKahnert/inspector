@@ -11,7 +11,7 @@ answering ends in `TIMEOUT` after 5 s, or after a `send`'s settle timeout plus 5
 
 | Command | Answer |
 |---|---|
-| `hello` | `{"app","pid","provider"}`: which process answered |
+| `hello` | `{"app","instance","pid","provider"}`: which process answered, and the full instance name it was reached under |
 | `catalog` | `{"actions":[{"path","payload"?}]}`. `payload` is the schema; it is missing for an action that takes none |
 | `state` | The whole state document: every registered key with its current value |
 | `state <path>` | The value at a dotted path inside the state document |
@@ -67,7 +67,9 @@ its instance `name`, `live`, and for a live one `app`, `pid` and `provider`. Wit
 serving, every other command fails with `AMBIGUOUS_APP` until `--app <name>` picks one, for example
 `scripts/inspector.sh --app "$(scripts/inspector.sh apps | jq -r '.[0].name')" state`. Apps
 advertise as `<app> @ <device>`, so `--app DemoHost` is enough while only one DemoHost serves. A
-second instance of the same app on the same device gets a Bonjour suffix such as `(2)`.
+second instance of the same app on the same device gets a Bonjour suffix such as `(2)`. A full
+instance name (`name` from `apps`, `instance` from `hello`) connects at once; the `<app>` part
+waits about 500 ms for a second match, so pass the full name to every call in a loop.
 
 ## Screenshots
 

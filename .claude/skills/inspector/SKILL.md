@@ -36,7 +36,8 @@ and a picture you still have to interpret. So:
 1. **Connect and find out where the app is.** Run `scripts/inspector.sh hello`, then
    `scripts/inspector.sh state`: the app may still show a sheet or a deep screen from an earlier
    session, and the route has to start from there. The first call builds the CLI (a few seconds);
-   later calls take about 20–100 ms. `APP_NOT_FOUND` means no debug build is serving: ask the
+   later calls take about 550 ms, or 20–100 ms with `--app` set to the full `instance` name from
+   `hello`, which skips the wait for a second app. `APP_NOT_FOUND` means no debug build is serving: ask the
    user to start the app instead of retrying. `TIMEOUT` means the app stopped answering, for
    example at a breakpoint. `AMBIGUOUS_APP` means several apps
    serve: pick one with `--app` (see `references/cli.md` → *Several apps*).
