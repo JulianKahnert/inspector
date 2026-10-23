@@ -91,7 +91,7 @@ flowchart LR
 inspector [--app name] apps | hello | catalog | state [path]
                       | send <path> [json] [--until <match> [--timeout s]]
                       | wait <match> [--timeout s]
-inspector end
+inspector capture | end
 ```
 
 Against `demo-host`:
@@ -183,7 +183,14 @@ $ scripts/inspector.sh end
 {"session":"inspector-RoommateAlbert-20260101-132548","xcode":{"userMessage":"Session stopped"}}
 ```
 
-A refused binary ends in `NOT_APPROVED`, an ended session whose app is gone in `NO_SESSION`; [ADR 004](docs/adr/004-cli.md#commands-through-xcode) has every code, the steps of `init` and the session restart.
+`inspector capture` captures the simulator's screen in the same session and answers with the paths of the screenshot and the hierarchy Xcode wrote, plus `targets`: the controls on the screen with their `type`, `identifier`, `label`, `placeholder` and `value` where the hierarchy names them, and the `hitPoint` a tap goes to, as `[x, y]` in points. An agent reads `targets`, about 1 KB for a busy screen, instead of the 5 to 25 KB hierarchy; a typed field value shows up there even when the app's state does not hold it. The paths also go to `run.json` as `lastHierarchy` and `lastScreenshot`.
+
+```console
+$ scripts/inspector.sh capture | jq -c '.targets[] | select(.label == "Stand eintragen")'
+{"hitPoint":[363.3,84],"label":"Stand eintragen","type":"Button"}
+```
+
+A refused binary ends in `NOT_APPROVED`, an ended session whose app is gone in `NO_SESSION`, a capture without a hierarchy in `NO_HIERARCHY`; [ADR 004](docs/adr/004-cli.md#commands-through-xcode) has every code, the steps of `init` and the session restart.
 
 ## Debugging a running app with an agent
 
