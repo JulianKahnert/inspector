@@ -155,6 +155,53 @@ struct GestureCommandTests {
     #expect(outcome.stderr.contains("Usage: inspector tap"))
   }
 
+  @Test(
+    "swipe drags from the first point to the second, over the duration when one is given",
+    arguments: [
+      (["swipe", "201", "110", "201", "820", "0.3"], "t 201 110 f 201 820 0.3"),
+      (["swipe", "201.5", "700", "201.5", "250"], "t 201.5 700 f 201.5 250"),
+    ])
+  func swipe(arguments: [String], command: String) async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let xcode = FakeXcode { _ in .text(Self.artifacts) }
+
+      let outcome = await InspectorCLI.outcome(of: arguments, in: sandbox.environment(xcode.environment(), in: "app"))
+
+      #expect(outcome == .stdout(#"{"gesture":"\#(command)"}"#))
+      #expect(xcode.calls.map { $0.arguments["interactionCommand"] } == [.string(command)])
+    }
+  }
+
+  @Test("swipe with --until answers like send")
+  func swipeUntil() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let (app, _) = try await Self.screen()
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["swipe", "201", "110", "201", "820", "--until", #"{"taps":1}"#, "--timeout", "1"],
+        in: sandbox.environment(app, in: "app"))
+
+      #expect(outcome == .stdout(#"{"diff":[{"new":1,"old":0,"path":"taps"}],"settled":true,"state":{"taps":1}}"#))
+    }
+  }
+
+  @Test(
+    "swipe takes two points and an optional positive duration, else it is a usage error",
+    arguments: [
+      ["swipe", "1", "2", "3"], ["swipe", "1", "2", "3", "4", "0"], ["swipe", "1", "2", "3", "4", "-1"],
+      ["swipe", "1", "2", "3", "4", "0.3", "5"],
+    ])
+  func swipeUsage(arguments: [String]) async throws {
+    let outcome = await InspectorCLI.outcome(of: arguments, in: FakeXcode { _ in .silence }.environment())
+
+    #expect(outcome.exitCode == 64)
+    #expect(outcome.stderr.contains("Usage: inspector swipe"))
+  }
+
   /// Xcode with the screen from the fixture `hierarchy` on it: a capture answers with that
   /// hierarchy, a gesture with ``artifacts``.
   private static func screenOf(_ hierarchy: String, in sandbox: Sandbox) throws -> FakeXcode {
