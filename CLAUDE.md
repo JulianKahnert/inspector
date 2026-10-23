@@ -38,7 +38,8 @@ swift run inspector send counter.set 42
 ```
 
 Without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, an app that stops
-answering ends in `TIMEOUT`, and with several apps serving it needs `--app`.
+answering ends in `TIMEOUT`, and with several apps serving it needs `--app`, unless an
+`.inspector/config.json` names the instance ([The `.inspector/` folder](README.md#the-inspector-folder)).
 What each answer looks like is under [The CLI](README.md#the-cli).
 
 ## Driving a running app to debug it
