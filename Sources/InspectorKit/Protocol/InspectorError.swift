@@ -16,6 +16,9 @@ public enum ErrorCode: String, Codable, Equatable, Sendable {
   case ambiguousApp = "AMBIGUOUS_APP"
   /// The app was found but did not answer in time.
   case timeout = "TIMEOUT"
+  /// A condition did not hold before its timeout; ``InspectorError/detail`` carries the last
+  /// state checked, as one line of JSON.
+  case expectationFailed = "EXPECTATION_FAILED"
 }
 
 /// A rejection sent back in place of a normal response.
