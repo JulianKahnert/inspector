@@ -83,6 +83,7 @@ flowchart LR
 - `Sources/demo-host/` - A fake app on the Mac for manual checks
 - `Tests/InspectorKitTests/` - In-process tests, no sockets
 - `Tests/InspectorCLITests/` - Every command's exact output, run against an in-process app, and the `.inspector/` folder in a temporary directory
+- `Tests/SkillScripts/` - The skill's `integrate.sh` and `remove.sh`, run against throwaway git repositories holding a minimal SwiftPM app
 - `.claude/skills/inspector/` - The Claude Code skill for driving a running app
 
 ## The CLI
@@ -252,7 +253,13 @@ On iOS, declare `_inspector._tcp` in the app's `NSBonjourServices` and give an `
 swift build && swift test
 ```
 
-The tests run against `Inspector` and the request handler directly, or through an in-memory transport; none opens a socket. `BonjourTransport` has no automated test, so check it by hand with two terminals:
+The tests run against `Inspector` and the request handler directly, or through an in-memory transport; none opens a socket. The skill's integration scripts have a shell test of their own: it builds throwaway git repositories in a temporary directory and, in one test, a SwiftPM app against this package.
+
+```sh
+Tests/SkillScripts/integrate-remove.sh              # about 10 s
+Tests/SkillScripts/integrate-remove.sh --no-build   # skips the build
+```
+ `BonjourTransport` has no automated test, so check it by hand with two terminals:
 
 ```sh
 swift run demo-host                  # terminal 1
