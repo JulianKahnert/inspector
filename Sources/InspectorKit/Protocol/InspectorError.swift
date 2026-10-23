@@ -22,6 +22,17 @@ public enum ErrorCode: String, Codable, Equatable, Sendable {
   /// A payload names `${NAME}` and `.inspector/.env` has no value for it;
   /// ``InspectorError/detail`` lists the missing names.
   case envMissing = "ENV_MISSING"
+  /// The Xcode device interaction session in `.inspector/config.json` has ended, and the app it
+  /// started with it.
+  case noSession = "NO_SESSION"
+  /// Xcode has not approved this `inspector` binary for its tools; a human confirms Xcode's
+  /// dialog, calling again changes nothing.
+  case notApproved = "NOT_APPROVED"
+  /// The selected Xcode has no `mcpbridge`.
+  case xcodeTooOld = "XCODE_TOO_OLD"
+  /// One of Xcode's tools failed; the message quotes Xcode's text, ``InspectorError/detail`` is
+  /// that text alone.
+  case xcodeError = "XCODE_ERROR"
 }
 
 /// A rejection sent back in place of a normal response.
