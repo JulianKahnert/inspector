@@ -40,6 +40,9 @@ answering ends in `TIMEOUT` after 5 s, or after a `send`'s settle timeout plus 5
   `diff` can be empty although the screen opens. Wait for the screen's key with
   `scripts/wait-state.sh` instead.
 - The app side gives an action 5 seconds by default.
+- `${NAME}` in the payload is filled from `.inspector/.env` (see below), for example
+  `send session.login '{"user":"${USER}","password":"${SECRET}"}'`. The answer, an error and
+  `run.json` show each filled-in value as `${NAME}`, a number equal to one as the string `"${NAME}"`.
 
 ## Payload schemas in the catalog
 
@@ -59,6 +62,8 @@ string), `optional` (`of`), `array` (`of`), `enum` (`values`: pass one of them a
 | `APP_NOT_FOUND` | No serving app within 5 s, or none matches `--app` | Check that a debug build is running and serving, and the name in `inspector apps` |
 | `AMBIGUOUS_APP` | Several apps serve and no `--app` picks one. `detail` lists their instance names | Repeat the call with `--app <name>` |
 | `TIMEOUT` | The app was found but did not answer in time | Check that the app is still running and not stopped in the debugger |
+| `NO_CONFIG` | The call needs `.inspector/` and there is none, or `INSPECTOR_DIR` names nothing. `detail` is the expected path | Create the folder there, or fix `INSPECTOR_DIR` |
+| `ENV_MISSING` | A `${NAME}` in the payload has no value in `.inspector/.env`. `detail` lists the names | Add them to `.inspector/.env`; nothing was sent |
 
 ## Several apps
 
@@ -70,6 +75,16 @@ advertise as `<app> @ <device>`, so `--app DemoHost` is enough while only one De
 second instance of the same app on the same device gets a Bonjour suffix such as `(2)`. A full
 instance name (`name` from `apps`, `instance` from `hello`) connects at once; the `<app>` part
 waits about 500 ms for a second match, so pass the full name to every call in a loop.
+
+## `.inspector/`
+
+A folder in the app's repository root that binds separate calls to one app. Every command but
+`apps` looks for it from the working directory up to the repository root; `INSPECTOR_DIR=<path>`
+names it for one call instead. Without it, the commands work as before.
+
+- `config.json`: `instance` (the full instance name) is the default for `--app`; `--app` wins.
+- `run.json`: `lastStep` is the last call, `{"arguments","at","command"}`, `at` being its start.
+- `.env`: `NAME=value` lines for `${NAME}` in a `send` payload. Never in git, never printed.
 
 ## Screenshots
 
