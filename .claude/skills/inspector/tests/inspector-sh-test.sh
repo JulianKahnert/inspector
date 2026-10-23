@@ -225,6 +225,18 @@ expect "calls" "$build" "$log"
 expect "stderr" "$(lines "error: cannot find 'Foo' in scope" \
   "{\"code\":\"BUILD_FAILED\",\"detail\":\"$checkout\",\"message\":\"could not build the inspector CLI; the compiler's output is above\"}")" "$err"
 
+scenario "a failure whose detail holds a newline or a control character is still one JSON line"
+plain_checkout="$checkout"
+checkout="$sandbox/odd"$'\n\x01'"dir"
+binary="$checkout/.build/debug/inspector"
+checkout_fresh
+run FAKE_BUILD_FAIL=1 -- inspector.sh state
+expect "exit code" 1 "$code"
+expect "detail" "$checkout" "$(tail -n 1 <<<"$err" | jq -j .detail 2>&1)"
+rm -rf "$checkout"
+checkout="$plain_checkout"
+binary="$checkout/.build/debug/inspector"
+
 scenario "through the link, wait-state.sh reaches the CLI"
 binary_built "$identifier"
 run -- wait-state.sh '.' 1
