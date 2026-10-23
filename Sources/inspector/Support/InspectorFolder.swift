@@ -132,6 +132,18 @@ enum FolderLookup: Equatable, Sendable {
     }
   }
 
+  /// The repository `workingDirectory` lies in: the first directory upwards with a `.git`, or
+  /// `workingDirectory` itself outside a repository.
+  static func repositoryRoot(from workingDirectory: URL) -> URL {
+    var directory = workingDirectory.standardizedFileURL
+    while !FileManager.default.fileExists(atPath: directory.appending(path: ".git").path) {
+      let parent = directory.deletingLastPathComponent()
+      if parent.path == directory.path { return workingDirectory.standardizedFileURL }
+      directory = parent
+    }
+    return directory
+  }
+
   private static func isDirectory(_ url: URL) -> Bool {
     var isDirectory: ObjCBool = false
     return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
