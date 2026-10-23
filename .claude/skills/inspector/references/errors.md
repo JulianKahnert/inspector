@@ -41,7 +41,7 @@ changes nothing.
 | `code` | Situation | Who | Next step |
 |---|---|---|---|
 | `NO_CONFIG` | No `.inspector/` from here up to the repository root, `INSPECTOR_DIR` names nothing, or (from `logs.sh`) `config.json` lacks `udid` or `logSubsystem`; `detail` is the path expected | Agent | Cold `scripts/inspector.sh init` in the app's repository, or fix `INSPECTOR_DIR` |
-| `NO_SESSION` | `config.json` names no session, or the session expired and its app with it | Agent | Cold `init` |
+| `NO_SESSION` | `config.json` names no session, the session expired and its app with it, or a gesture with `--until` found its app not answering | Agent | Cold `init` |
 | `BAD_REQUEST` | From `logs.sh`: no `lastStep` in `run.json` | Agent | `scripts/logs.sh --since <seconds>` |
 | `BAD_REQUEST` | From `logs.sh`: `log show` failed; `detail` is simctl's message | Agent | Cold `init` (the simulator in `config.json` is shut down or gone) |
 
