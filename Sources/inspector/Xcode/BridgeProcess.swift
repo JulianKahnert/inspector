@@ -1,5 +1,6 @@
 import Foundation
 import InspectorKit
+import Synchronization
 
 /// The standard input and output of one `xcrun mcpbridge` process, the seam a test fakes.
 protocol BridgeProcess: Sendable {
@@ -29,7 +30,7 @@ final class BridgeSubprocess: BridgeProcess {
 
   /// Starts the bridge.
   ///
-  /// - Throws: ``ErrorCode/xcodeTooOld`` when `xcrun` itself cannot be started.
+  /// - Throws: ``ErrorCode/xcodeError`` when `xcrun` itself cannot be started.
   init() throws(InspectorError) {
     // A write to a bridge that already exited must fail as an error, not end this process.
     signal(SIGPIPE, SIG_IGN)
@@ -46,16 +47,27 @@ final class BridgeSubprocess: BridgeProcess {
     do {
       try process.run()
     } catch {
-      throw InspectorError(code: .xcodeTooOld, message: "could not start `xcrun mcpbridge`", detail: "\(error)")
+      throw InspectorError(code: .xcodeError, message: "could not start `xcrun mcpbridge`", detail: "\(error)")
     }
     let (lines, continuation) = AsyncThrowingStream<String, any Error>.makeStream()
     self.lines = lines
-    Task {
-      do {
-        for try await line in output.fileHandleForReading.bytes.lines { continuation.yield(line) }
+    // Not `FileHandle.bytes`: on a pipe it holds a short reply back until the bridge exits.
+    let pending = Mutex(Data())
+    output.fileHandleForReading.readabilityHandler = { handle in
+      let data = handle.availableData
+      guard !data.isEmpty else {
+        handle.readabilityHandler = nil
         continuation.finish()
-      } catch {
-        continuation.finish(throwing: error)
+        return
+      }
+      let complete = pending.withLock { buffer in
+        buffer.append(data)
+        guard let end = buffer.lastIndex(of: UInt8(ascii: "\n")) else { return Data() }
+        defer { buffer.removeSubrange(...end) }
+        return Data(buffer[...end])
+      }
+      for line in complete.split(separator: UInt8(ascii: "\n")) {
+        continuation.yield(String(decoding: line, as: UTF8.self))
       }
     }
     errors = Task {
