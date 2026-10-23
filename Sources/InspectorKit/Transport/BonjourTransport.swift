@@ -20,7 +20,9 @@ public struct BonjourTransport: InspectorTransport {
   ///
   /// When serving, `nil` advertises under the device's name; ``Inspector/serve(app:)`` passes
   /// `<app> @ <device>`. When sending, the name selects the app by its full instance name or by
-  /// the part before ` @ `, and `nil` works only while exactly one app serves.
+  /// the part before ` @ `, and `nil` works only while exactly one app serves. A full instance
+  /// name connects as soon as Bonjour reports it; the part before ` @ ` and `nil` wait about half
+  /// a second longer for a second match.
   public var name: String?
 
   /// Creates a transport that advertises or looks for the given instance name.
@@ -48,7 +50,7 @@ public struct BonjourTransport: InspectorTransport {
     let notFound = InspectorError(
       code: .appNotFound,
       message: name.map { "no serving app matches `\($0)`" } ?? "no serving app found")
-    let endpoint: Bonjour.Endpoint = try await Self.first(within: .seconds(5), orThrow: notFound) {
+    let endpoint: Bonjour.Endpoint = try await withDeadline(.seconds(5), orThrow: notFound) {
       try await Self.browse(for: name, orThrow: notFound)
     }
 
@@ -56,7 +58,7 @@ public struct BonjourTransport: InspectorTransport {
     let timedOut = InspectorError(
       code: .timeout,
       message: "`\(endpoint.name)` did not answer within \(responseTimeout.components.seconds) s")
-    return try await Self.first(within: responseTimeout, orThrow: timedOut) {
+    return try await withDeadline(responseTimeout, orThrow: timedOut) {
       let connection = NetworkConnection(to: endpoint) {
         Coder(WireMessage.self, using: .json) { TCP() }
       }
@@ -64,41 +66,68 @@ public struct BonjourTransport: InspectorTransport {
       guard case .response(let response) = try await connection.receive().content else {
         throw InspectorError(code: .badRequest, message: "unexpected message from app")
       }
-      return response
+      return Self.stampingInstance(endpoint.name, on: response)
     }
   }
 
-  /// The one endpoint `app` selects, once no second match has turned up for a short while.
-  ///
-  /// Bonjour reports services one by one as it finds them, so the first update with a match may
-  /// not hold a second app that matches too; returning then would skip ``ErrorCode/ambiguousApp``.
+  /// `response` with `instance` stamped on it when it is a hello answer, so `hello` names the
+  /// instance the CLI reached; every other answer as it is.
+  static func stampingInstance(_ instance: String, on response: Response) -> Response {
+    guard case .hello(var hello) = response else { return response }
+    hello.instance = instance
+    return .hello(hello)
+  }
+
+  /// The one endpoint `app` selects among the services Bonjour finds.
   private static func browse(for app: String?, orThrow notFound: InspectorError) async throws -> Bonjour.Endpoint {
     let (updates, continuation) = AsyncStream.makeStream(
       of: [Bonjour.Endpoint].self, bufferingPolicy: .bufferingNewest(1))
-    return try await withThrowingTaskGroup { group in
-      group.addTask {
-        let _: Void = try await NetworkBrowser(for: .bonjour(serviceType, domain: nil, includeTxtRecord: false))
-          .run { endpoints in
-            continuation.yield(endpoints)
-            return .continue
-          }
-      }
-      defer { group.cancelAll() }
-      var latest: [Bonjour.Endpoint] = []
-      for await endpoints in updates {
-        latest = endpoints
-        if try select(app, from: endpoints.map(\.name)) != nil { break }
-      }
-      try Task.checkCancellation()
+    // Cancelled, never awaited: the browser may not end on cancellation (see `withDeadline`).
+    let browser = Task {
+      let _: Void = try await NetworkBrowser(for: .bonjour(serviceType, domain: nil, includeTxtRecord: false))
+        .run { endpoints in
+          continuation.yield(endpoints)
+          return .continue
+        }
+    }
+    defer { browser.cancel() }
+    let match = try await discover(app, in: updates, name: \.name) {
       // A guess at how long a second app on the same network takes to show up; not measured.
       try await Task.sleep(for: .milliseconds(500))
       continuation.finish()
-      for await endpoints in updates { latest = endpoints }
-      guard let selected = try select(app, from: latest.map(\.name)),
-        let match = latest.first(where: { $0.name == selected })
-      else { throw notFound }
-      return match
     }
+    guard let match else { throw notFound }
+    return match
+  }
+
+  /// The one endpoint `app` selects from a browser's `updates`, or `nil` when none does.
+  ///
+  /// Bonjour reports services one by one as it finds them, so the first update with a match may
+  /// not hold a second app that matches too; returning then would skip ``ErrorCode/ambiguousApp``.
+  /// So once a match turns up, `graceWindow` lets later updates arrive and then finishes
+  /// `updates`, and the last update decides.
+  ///
+  /// A full instance name skips that wait: Bonjour keeps instance names unique per service type
+  /// and domain, so the first endpoint with exactly that name is the only one it can select.
+  ///
+  /// - Throws: ``ErrorCode/ambiguousApp`` when several endpoints match.
+  static func discover<Endpoint>(
+    _ app: String?,
+    in updates: AsyncStream<[Endpoint]>,
+    name: (Endpoint) -> String,
+    graceWindow: () async throws -> Void
+  ) async throws -> Endpoint? {
+    var latest: [Endpoint] = []
+    for await endpoints in updates {
+      if let app, let exact = endpoints.first(where: { name($0) == app }) { return exact }
+      latest = endpoints
+      if try select(app, from: endpoints.map(name)) != nil { break }
+    }
+    try Task.checkCancellation()
+    try await graceWindow()
+    for await endpoints in updates { latest = endpoints }
+    guard let selected = try select(app, from: latest.map(name)) else { return nil }
+    return latest.first { name($0) == selected }
   }
 
   /// The instance name ``Inspector/serve(app:)`` advertises: `<app> @ <device>`.
@@ -118,43 +147,63 @@ public struct BonjourTransport: InspectorTransport {
 
   /// How long the CLI waits for an answer once it has found the app.
   ///
-  /// Never shorter than the app may take: a send waits for its effects up to `timeoutMs`, or the
-  /// app's default settle timeout, before it answers.
+  /// Never shorter than the app may take, so the CLI never gives up before the app does: a send
+  /// waits for its effects up to `timeoutMs`, or the app's default settle timeout, then for its
+  /// `until` condition; a wait for its condition.
   static func responseTimeout(for request: Request) -> Duration {
     let margin: Duration = .seconds(5)
-    guard case .send(let send) = request else { return margin }
-    return (send.timeoutMs.map { .milliseconds($0) } ?? InspectorCore.defaultSettleTimeout) + margin
+    switch request {
+    case .send(let send):
+      let settle = send.timeoutMs.map { .milliseconds($0) } ?? InspectorCore.defaultSettleTimeout
+      guard send.until != nil else { return settle + margin }
+      return settle + conditionTimeout(send.untilTimeoutMs) + margin
+    case .wait(let wait):
+      return conditionTimeout(wait.timeoutMs) + margin
+    case .hello, .catalog, .state:
+      return margin
+    }
+  }
+
+  private static func conditionTimeout(_ milliseconds: Int?) -> Duration {
+    milliseconds.map { .milliseconds($0) } ?? InspectorCore.defaultConditionTimeout
   }
 
   /// The instance names of every app that advertises ``serviceType`` within `duration`, sorted.
   public static func instanceNames(browsingFor duration: Duration) async throws -> [String] {
     // Only the latest endpoint list matters; older ones are superseded, never merged.
-    let (updates, continuation) = AsyncStream.makeStream(of: [String].self, bufferingPolicy: .bufferingNewest(1))
-    try await withThrowingTaskGroup { group in
-      group.addTask {
+    let (updates, continuation) = AsyncThrowingStream.makeStream(
+      of: [String].self, bufferingPolicy: .bufferingNewest(1))
+    // Cancelled, never awaited: the browser may not end on cancellation (see `withDeadline`).
+    let browser = Task {
+      do {
         let _: Void = try await NetworkBrowser(for: .bonjour(serviceType, domain: nil, includeTxtRecord: false))
           .run { endpoints in
             continuation.yield(endpoints.map(\.name))
             return .continue
           }
+      } catch {
+        continuation.finish(throwing: error)
       }
-      group.addTask { try await Task.sleep(for: duration) }
-      try await group.next()
-      group.cancelAll()
     }
+    defer { browser.cancel() }
+    try await Task.sleep(for: duration)
     continuation.finish()
     var names: [String] = []
-    for await latest in updates { names = latest }
+    for try await latest in updates { names = latest }
     return Set(names).sorted()
   }
 
   /// Picks the one instance name `app` selects, or `nil` while none does.
   ///
+  /// A name equal to `app` wins over names that only start with `<app> @ `, since Bonjour
+  /// instance names are unique.
+  ///
   /// - Throws: ``ErrorCode/ambiguousApp`` when several names match.
   static func select(_ app: String?, from names: [String]) throws -> String? {
+    if let app, names.contains(app) { return app }
     let matches = names.filter { name in
       guard let app else { return true }
-      return name == app || name.hasPrefix("\(app) @ ")
+      return name.hasPrefix("\(app) @ ")
     }
     guard matches.count <= 1 else {
       throw InspectorError(
@@ -163,23 +212,6 @@ public struct BonjourTransport: InspectorTransport {
         detail: matches.joined(separator: ", "))
     }
     return matches.first
-  }
-
-  private static func first<Value: Sendable>(
-    within duration: Duration,
-    orThrow timeoutError: InspectorError,
-    _ operation: @escaping @Sendable () async throws -> Value
-  ) async throws -> Value {
-    try await withThrowingTaskGroup { group in
-      group.addTask { try await operation() }
-      group.addTask {
-        try await Task.sleep(for: duration)
-        throw timeoutError
-      }
-      defer { group.cancelAll() }
-      guard let value = try await group.next() else { throw timeoutError }
-      return value
-    }
   }
 }
 

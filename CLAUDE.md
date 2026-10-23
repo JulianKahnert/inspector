@@ -12,6 +12,11 @@ for that repo and holds every code example, so this file links there instead of 
 | `inspector` | executable | The CLI; talks to the app over `BonjourTransport` |
 | `demo-host` | executable | A fake app on the Mac for manual checks |
 | `InspectorKitTests` | tests | Swift Testing; in-process only, no sockets |
+| `InspectorCLITests` | tests | Every command's stdout, stderr and exit code, against an in-process app |
+
+A CLI command is one file in `Sources/inspector/Commands/` that conforms to `InspectorCommand`,
+plus one entry in `InspectorCLI`'s `subcommands`; its tests run it through
+`InspectorCLI.outcome(of:in:)` against an in-process app.
 
 The module is `InspectorKit`, not `Inspector`: a module and a type with the same name break
 qualified lookup.
@@ -30,18 +35,34 @@ swift run inspector --app <name> hello
 swift run inspector catalog
 swift run inspector state [path]
 swift run inspector send counter.set 42
+swift run inspector send counter.set 42 --until '{"counter":42}'
+swift run inspector wait '{"counter":42}' --timeout 1
+bash .claude/skills/inspector/tests/logs-test.sh   # the skill's logs.sh against a fake xcrun
+bash .claude/skills/inspector/tests/integrate-remove-test.sh  # integrate.sh/remove.sh on throwaway repos; --no-build
+bash .claude/skills/inspector/tests/inspector-sh-test.sh      # inspector.sh's rebuild and signing, through a symlink
 ```
 
+Commands through Xcode (`capture`, `end`) need the signed binary: run them through
+`.claude/skills/inspector/scripts/inspector.sh`, which signs after every build; `swift run` and a
+bare `swift build` leave a signature Xcode refuses with `NOT_APPROVED`.
+
 Without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, an app that stops
-answering ends in `TIMEOUT`, and with several apps serving it needs `--app`.
+answering ends in `TIMEOUT`, a condition that does not hold ends in `EXPECTATION_FAILED`, and with
+several apps serving it needs `--app`, unless an `.inspector/config.json` names the instance
+([The `.inspector/` folder](README.md#the-inspector-folder)).
 What each answer looks like is under [The CLI](README.md#the-cli).
 
 ## Driving a running app to debug it
 
 Load the `inspector` skill (`.claude/skills/inspector/`) whenever a change has to be checked in a
-running app. It owns the whole loop and its scripts: building the CLI, finding the serving app,
-navigating, waiting for a screen's state, screenshots, and the error codes. Keep those details in
-the skill and link to it from here, the same way the usage examples live only in the README.
+running app. It owns the whole loop and its scripts: building and signing the CLI, `init`,
+navigating, gestures, diagnosis, the integration scripts, and every error code with its next step.
+Keep those details in the skill and link to it from here, the same way the usage examples live
+only in the README.
+
+Other repositories load the skill through the symlink `~/.claude/skills/inspector` to this
+checkout's skill directory, so the branch checked out here is the skill and the CLI every session
+runs; `inspector.sh` rebuilds the CLI on its next call when a source is newer than the binary.
 
 ## Usage examples
 

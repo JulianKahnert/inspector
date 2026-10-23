@@ -5,7 +5,7 @@ Read the state of a running macOS or iOS app and steer it from the command line.
 ## Why inspector?
 
 - **Reach deep screens**: An agent sends the actions that lead to a screen instead of tapping through the UI, then reads what that screen shows as JSON.
-- **Built for agents**: Every answer is one JSON document, every rejection carries a machine-readable `code`, and the whole protocol is four operations.
+- **Built for agents**: Every answer is one JSON document, every rejection carries a machine-readable `code`, an action and the check of its outcome are one call, and the whole protocol is five operations.
 - **Actions are data**: The app registers state readers and actions at runtime. A new action needs no CLI code and no new message type.
 - **No dependencies**: Foundation and Network.framework only, compiled into debug builds.
 
@@ -69,7 +69,7 @@ flowchart LR
     Inspector --> Actions[Registered<br/>actions]
 ```
 
-**Four operations**: `hello`, `catalog`, `state` and `send`. Actions and their payload schemas travel as catalog data.
+**Five operations**: `hello`, `catalog`, `state`, `send` and `wait`. Actions and their payload schemas travel as catalog data. A condition is checked inside the app, so waiting for a screen costs no network round trip per check.
 
 ### Two protocols
 
@@ -79,15 +79,21 @@ flowchart LR
 ## Project Structure
 
 - `Sources/InspectorKit/` - `Inspector`, the protocol types and the transports
-- `Sources/inspector/` - The CLI
+- `Sources/inspector/` - The CLI, on swift-argument-parser: one file per command in `Commands/`, registered in `InspectorCLI.swift`
 - `Sources/demo-host/` - A fake app on the Mac for manual checks
 - `Tests/InspectorKitTests/` - In-process tests, no sockets
+- `Tests/InspectorCLITests/` - Every command's exact output, run against an in-process app, and the `.inspector/` folder in a temporary directory
 - `.claude/skills/inspector/` - The Claude Code skill for driving a running app
 
 ## The CLI
 
 ```
-inspector [--app name] apps | hello | catalog | state [path] | send <path> [json]
+inspector [--app name] apps | hello | catalog | state [path]
+                      | send <path> [json] [--until <match> [--timeout s]]
+                      | wait <match> [--timeout s]
+inspector init [--warm] [--reset] | capture | end
+inspector tap (<x> <y> | --target <name>) | swipe <x1> <y1> <x2> <y2> [s] | type <text>
+                      [--until <match> [--timeout s]]
 ```
 
 Against `demo-host`:
@@ -97,7 +103,7 @@ $ inspector apps
 [{"app":"DemoHost","live":true,"name":"…","pid":39817,"provider":"Inspector"}]
 
 $ inspector hello
-{"app":"DemoHost","pid":39817,"provider":"Inspector"}
+{"app":"DemoHost","instance":"DemoHost @ …","pid":39817,"provider":"Inspector"}
 
 $ inspector catalog
 {"actions":[{"path":"counter.increment"},{"path":"counter.set","payload":{"kind":"int"}}]}
@@ -117,26 +123,114 @@ $ inspector send counter.sett
 $ inspector send counter.increment
 {"diff":[{"new":43,"old":42,"path":"counter"}],"settled":true,"state":{"counter":43,"device":{…}}}
 
+$ inspector send counter.set 42 --until '{"counter":42}'
+{"diff":[{"new":42,"old":43,"path":"counter"}],"settled":true,"state":{"counter":42,"device":{…}}}
+
+$ inspector wait '{"counter":42,"device":{}}'
+{"counter":42,"device":{"name":"…","pid":"39817"}}
+
+$ inspector wait '{"counter":99}' --timeout 1
+{"code":"EXPECTATION_FAILED","detail":"{\"counter\":42,\"device\":{…}}","message":"`{\"counter\":99}` did not hold within 1000 ms"}
 ```
 
-- **Several apps**: `inspector apps` lists every serving app and checks each with `hello`; an app that does not answer is listed with `"live":false`. Apps advertise as `<app> @ <device>`. With more than one app serving, every other command fails with `AMBIGUOUS_APP` until `--app` picks one by that name or its `<app>` part. With none, it fails with `APP_NOT_FOUND` after 5 seconds.
+- **Several apps**: `inspector apps` lists every serving app and checks each with `hello`; an app that does not answer is listed with `"live":false`. Apps advertise as `<app> @ <device>`. With more than one app serving, every other command fails with `AMBIGUOUS_APP` until `--app` picks one by that name or its `<app>` part. With none, it fails with `APP_NOT_FOUND` after 5 seconds. A full instance name connects as soon as Bonjour reports it; the `<app>` part, or no `--app`, waits about 500 ms more for a second match, so a caller that talks to one app repeatedly passes the full name, which `hello` prints as `instance`.
 - **Stable output**: Keys are sorted, so two answers with the same content are byte-identical.
 - **Errors**: A rejection goes to stderr as one JSON line and the CLI exits with 1. Branch on `code`, never on `message`.
 - **`didYouMean`**: For an unknown action path, lists the registered paths that share its last segment or its prefix.
 - **Payloads**: A `send` payload is parsed as JSON; anything that does not parse is sent as a string.
+- **Conditions**: `wait` and `send --until` take a match document, a JSON object the state has to contain. An empty object `{}` as a value asks only for the key to exist, an array matches as a prefix, a scalar exactly; there are no operators. The app checks it right away, whenever a state reader or an action is registered or cancelled, and every 25 ms, until it holds or `--timeout` passes (3 seconds by default). Then it fails with `EXPECTATION_FAILED` and the last state as JSON in `detail`. `send --until` answers like `send`, with the diff against the state before the action; `wait` prints the state. [ADR 004](docs/adr/004-cli.md#conditions) has the rules.
+
+### The `.inspector/` folder
+
+Each call is its own process, so a folder in the app's repository root binds the calls to one app. Every command but `apps` looks for `.inspector/` from the working directory up to the repository root, or takes the folder `INSPECTOR_DIR` names. Without it, the commands work as above.
+
+```console
+$ mkdir .inspector
+$ echo '{"instance":"DemoHost @ …"}' > .inspector/config.json
+$ inspector state counter                     # no --app: the instance from config.json
+0
+$ echo 'VALUE=42' > .inspector/.env
+$ inspector send counter.set '${VALUE}'
+{"diff":[{"new":"${VALUE}","old":0,"path":"counter"}],"settled":true,"state":{"counter":"${VALUE}","device":{…}}}
+$ cat .inspector/run.json
+{
+  "lastStep" : {
+    "arguments" : [
+      "send",
+      "counter.set",
+      "${VALUE}"
+    ],
+    "at" : "2026-10-23T12:47:36.711Z",
+    "command" : "send"
+  }
+}
+```
+
+- **`config.json`** binds the calls to an app, a simulator and an Xcode session: `app`, `instance`, `bundleId`, `udid`, `session`, `workspace`, `scheme`, `logSubsystem`, `writtenAt`. Only `inspector init` writes it; `instance` is the default for `--app`, and `--app` wins.
+- **`run.json`** holds what the last calls did: `lastStep` with the command, its arguments and when it started, and after a `capture` or gesture `lastHierarchy` and `lastScreenshot`. Each command replaces only its own fields.
+- **`.env`** holds `NAME=value` lines. `send` fills each `${NAME}` in its payload from there, `type` in its text, and fails with `ENV_MISSING` before sending when a name has no value; `${NAME}` without a folder fails with `NO_CONFIG`, whose `detail` is where the folder was expected.
+- **Masking**: A value filled in from `.env` shows as `${NAME}` in the answer, in an error and in `run.json`, wherever it appears, also where the state holds it for another reason; a number equal to it becomes the string `"${NAME}"`. Nothing else is masked, whatever its key is called.
+- **Git**: Never commit the folder. List `.inspector/` in `.gitignore` when the integration stays in the repository, or in `.git/info/exclude` when it is added only for a debugging session. `inspector init` adds the exclude entry itself when nothing ignores the folder yet.
+
+The rules per command are in [ADR 004](docs/adr/004-cli.md#the-inspector-folder).
+
+### Commands through Xcode
+
+`inspector init`, run in the app's repository, builds, installs and starts the app through Xcode in a new device interaction session, then answers with the `config.json` it wrote, `hello` and the whole `state`. It starts Xcode when it is not running and opens the repository's workspace. `--warm` skips Xcode and only reads an app that already serves, for when no code changed; `--reset` uninstalls the app first, which deletes its data. `inspector end` ends the session `config.json` names, and the app that session started with it. Such commands call Xcode's tools through `xcrun mcpbridge`, one short-lived bridge per call, and Xcode serves them only once a human approved the binary in Xcode's dialog. Xcode recognizes the binary by its signature, so run it through the skill's `scripts/inspector.sh`, which signs every build with your "Apple Development" identity and the identifier `de.juliankahnert.inspector`; a plain `swift build` leaves a signature Xcode refuses.
+
+```console
+$ scripts/inspector.sh init | jq -c .config      # from the app's repository
+{"app":"RoommateAlbert","bundleId":"de.juliankahnert.RoommateAlbert","instance":"RoommateAlbert @ <host>","logSubsystem":"de.juliankahnert.","scheme":"RoommateAlbert","session":"inspector-RoommateAlbert-20260101-132548","udid":"6D1A3C55-2B8E-4F1A-9C77-0E5B2A4D8F10","workspace":"workspace-Xy12AbC3dE","writtenAt":"2026-10-23T13:26:00Z"}
+$ scripts/inspector.sh end
+{"session":"inspector-RoommateAlbert-20260101-132548","xcode":{"userMessage":"Session stopped"}}
+```
+
+`inspector capture` captures the simulator's screen in the same session and answers with the paths of the screenshot and the hierarchy Xcode wrote, plus `targets`: the controls on the screen with their `type`, `identifier`, `label`, `placeholder` and `value` where the hierarchy names them, and the `hitPoint` a tap goes to, as `[x, y]` in points. An agent reads `targets`, about 1 KB for a busy screen, instead of the 5 to 25 KB hierarchy; a typed field value shows up there even when the app's state does not hold it. The paths also go to `run.json` as `lastHierarchy` and `lastScreenshot`.
+
+```console
+$ scripts/inspector.sh capture | jq -c '.targets[] | select(.label == "Stand eintragen")'
+{"hitPoint":[363.3,84],"label":"Stand eintragen","type":"Button"}
+```
+
+Gestures run in the same session, and **only in the simulator**: Xcode offers no physical device for them. `tap <x> <y>` taps a point, `tap --target <name>` captures first and taps the hit point of the one target whose identifier or label is the name, `swipe <x1> <y1> <x2> <y2> [seconds]` drags from one point to the other, and `type <text>` types into the focused field, with `${NAME}` filled from `.env` and masked like a `send` payload. Each takes `--until` and `--timeout` like `send`: the CLI reads the state, performs the gesture and has the app wait for the match, so the answer is `send`'s, diffed against the state before the gesture. Without `--until` the answer is the command Xcode ran, and for `--target` the target it hit. Every gesture writes Xcode's new screenshot and hierarchy to `run.json` like `capture`.
+
+```console
+$ scripts/inspector.sh send meters.editReading 0 --until '{"meters":{"detail":{"isEnterReadingOpen":true}}}'
+$ sleep 1                                      # let the sheet finish sliding in
+$ scripts/inspector.sh swipe 201 110 201 820 0.3 --until '{"meters":{"detail":{"isEnterReadingOpen":false}}}'
+{"diff":[{"old":"…","path":"meters.detail.editedReadingID"},{"old":true,"path":"meters.detail.isEnterReadingOpen"}],"settled":true,"state":{…}}
+$ scripts/inspector.sh tap --target "Stand eintragen"
+{"gesture":"t 363.3 84","target":{"hitPoint":[363.3,84],"label":"Stand eintragen","type":"Button"}}
+$ scripts/inspector.sh type 2100000
+{"gesture":"sender keyboard kbd 2100000"}
+```
+
+- **The screen lags the state**: the state reports a sheet open as soon as the app decided to present it, while the sheet is still sliding in. A gesture during that animation can be lost (a swipe right after the sheet opened failed every time at 0.2 s, reliably passed after 1 s), so wait about a second after a navigation before a gesture that needs the new screen. A gesture with `--until` shows such a loss as `EXPECTATION_FAILED` instead of a silent miss.
+- **A target** names a control by identifier or label; none is `TARGET_NOT_FOUND`, several at different points `TARGET_AMBIGUOUS`, both with the targets in `detail`. A control with neither, such as an unlabelled text field, is tapped by the coordinates `capture` lists.
+- **Typing** goes to the focused field, after whatever text it holds; Xcode reads `\u{0008}` as backspace and `\u{000A}` as Return.
+
+A refused binary ends in `NOT_APPROVED`, an ended session whose app is gone in `NO_SESSION`, a capture without a hierarchy in `NO_HIERARCHY`; [ADR 004](docs/adr/004-cli.md#commands-through-xcode) has every code, the steps of `init` and the session restart.
 
 ## Debugging a running app with an agent
 
 Claude Code gets this loop as the `inspector` skill in `.claude/skills/inspector/`, with scripts for each step. The app runs a debug build that registers state and actions and calls `serve()`.
 
-1. **Build the CLI once**, then call the binary directly. That skips the `swift run` check on every call, and one call then takes about 20–100 ms. Every call is bounded: without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, and an app that stops answering ends in `TIMEOUT`.
+To use the skill in every repository, link it once per machine:
+
+```sh
+ln -s ~/GIT/inspector/.claude/skills/inspector ~/.claude/skills/inspector
+```
+
+Its `scripts/inspector.sh` follows the link back to this checkout, builds the CLI when the binary is missing or older than a source file or the manifest, and signs it, so a session in another repository needs only the checkout, Swift and the link.
+
+1. **Build the CLI once**, then call the binary directly. That skips the `swift run` check on every call, and one call then takes about 20–100 ms with `--app` set to the full instance name, or about 550 ms without it. Every call is bounded: without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, an app that stops answering ends in `TIMEOUT`, and a condition that does not hold ends in `EXPECTATION_FAILED`.
 
 2. **Find out what is connected and what it offers.**
    - `dns-sd -B _inspector._tcp` lists every serving app under its device name. An app in the simulator advertises under the Mac's name.
-   - `inspector hello` names the app that answered, and its pid. The CLI connects to the first app it finds, so with several running, check `hello` before anything else.
+   - `inspector hello` names the app that answered, its pid, and the full `instance` name to pass to `--app` from then on.
    - `inspector catalog` lists the actions with their payload schema, `inspector state` returns every registered state reader. Both grow as you navigate: a screen registers its readers and actions when its model is created, so a screen that has not been opened yet is missing.
 
-3. **Navigate to the screen** with one `send` per step. After each step that pushes a screen or presents a sheet, poll `inspector state` until that screen's key appears before you send the next action. It usually takes 100–200 ms. A `send` answer can come back with an empty `diff` even when a screen opened, because that screen registers its state only after the action has settled.
+3. **Navigate to the screen** with one `send --until` per step. A step that pushes a screen or presents a sheet names the screen's key, `send settings.open --until '{"settings.detail":{}}'`, and answers once that screen has registered its state, usually 100–200 ms later. Without `--until`, a `send` answer can come back with an empty `diff` even when a screen opened, because that screen registers its state only after the action has settled. `inspector wait '<match>'` waits the same way without sending anything.
 
 4. **Read the answer from the state.** `inspector state` gives the whole document, and every `send` answer carries the `diff` it caused. The path in `inspector state <path>` is split at every dot, so a top-level key that itself contains a dot, such as `chat.draft`, is only reachable through the whole document: filter it locally, for example with `jq '."chat.draft"'`.
 
@@ -223,6 +317,15 @@ The tests run against `Inspector` and the request handler directly, or through a
 swift run demo-host                  # terminal 1
 swift run inspector hello            # terminal 2
 swift run inspector send counter.set 42
+```
+
+The skill's scripts have shell tests in `.claude/skills/inspector/tests/`. The one for `integrate.sh` and `remove.sh` builds throwaway git repositories in a temporary directory and, in one test, a SwiftPM app against this package:
+
+```sh
+bash .claude/skills/inspector/tests/integrate-remove-test.sh              # about 30 s
+bash .claude/skills/inspector/tests/integrate-remove-test.sh --no-build   # skips the build
+bash .claude/skills/inspector/tests/logs-test.sh                          # logs.sh against a fake xcrun
+bash .claude/skills/inspector/tests/inspector-sh-test.sh                  # rebuild and signing, through a symlink
 ```
 
 ## References
