@@ -28,13 +28,15 @@ struct ProcessOutput: Equatable, Sendable {
       throw InspectorError(
         code: .badRequest, message: "could not start `\(command.joined(separator: " "))`", detail: "\(error)")
     }
-    // Read both pipes while the program runs, so a full pipe never blocks it.
-    async let stdout = Task.detached { output.fileHandleForReading.readDataToEndOfFile() }.value
-    async let stderr = Task.detached { errorOutput.fileHandleForReading.readDataToEndOfFile() }.value
-    let (outData, errorData) = await (stdout, stderr)
+    let stdout = PipeReader(output.fileHandleForReading)
+    let stderr = PipeReader(errorOutput.fileHandleForReading)
     for await _ in exited {}
-    return ProcessOutput(
-      status: process.terminationStatus, stdout: String(decoding: outData, as: UTF8.self),
-      stderr: String(decoding: errorData, as: UTF8.self))
+    async let outText = stdout.text(waitingAtMost: Self.pipeGrace)
+    async let errorText = stderr.text(waitingAtMost: Self.pipeGrace)
+    return ProcessOutput(status: process.terminationStatus, stdout: await outText, stderr: await errorText)
   }
+
+  /// How long the pipes may stay open after the program exited; its own output is complete by
+  /// then, and only a child it left running holds a pipe longer.
+  static let pipeGrace: Duration = .seconds(1)
 }
