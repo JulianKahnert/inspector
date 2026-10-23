@@ -86,13 +86,18 @@ data, ask first.
 ## Integrating into an app or package
 
 When the app has no inspector yet, a route is missing a step, or a screen's state leaves out
-something it shows, add to the temporary debug integration. Register the state of each screen so
-it mirrors what the screen shows (see `references/integration.md` → *What a screen's state should
-carry*); every value missing there turns into a screenshot later. Follow `references/integration.md`: `scripts/add-to-package.sh` adds the dependency,
-then fill the copied `assets/DebugInspector.swift` template's `<#placeholders#>`
-(they keep the file from compiling until every one is filled). Add `registerInspector()` to each
-init, then `serve()` and the `Info.plist` keys. Mark every line `// DEBUG INSPECTOR`. To take it
-out again, run `scripts/find-debug-markers.sh <dirs>` and work through its list.
+something it shows, add to the debug integration. Register the state of each screen so it mirrors
+what the screen shows (see `references/integration.md` → *What a screen's state should carry*);
+every value missing there turns into a screenshot later.
+
+The integration is one file, `DebugInspector.swift`, that registers everything from the app's root
+object and is the only caller of `serve()`, plus three marked touch points: the dependency, one
+call in the app's entry point, and the two `Info.plist` keys. In a repository that never commits
+it, run `scripts/integrate.sh <repo> --from ~/.claude/inspector/integrations/<repo>` (or
+`--into <target path>` for the template), add the one marked call line, and before a pull request
+run `scripts/remove.sh <repo…>` and `scripts/remove.sh --check <repo…>`. Both run without asking.
+Where the store lives and how both scripts work: `references/integration.md` → *Ephemeral
+integration*.
 
 ## References
 
@@ -111,8 +116,12 @@ out again, run `scripts/find-debug-markers.sh <dirs>` and work through its list.
 - `scripts/add-to-package.sh <package dir> <target> [--ios-only] [--copy-template]` — adds
   InspectorKit via `swift package add-dependency` / `add-target-dependency`, marked, and rolls
   the manifest back on failure.
-- `scripts/find-debug-markers.sh <dir…>` — every `DEBUG INSPECTOR` file and line, for removal.
+- `scripts/integrate.sh <repo> --from <store dir> | --into <target path>` — sets up an integration
+  that is never committed, from the store or the template.
+- `scripts/remove.sh [<repo…>]` — takes it out again; `--check [--base <ref>]` exits 1 while
+  anything of it is left.
 
 ## Assets
 
-- `assets/DebugInspector.swift` — registration template for a list screen and a detail screen.
+- `assets/DebugInspector.swift` — the integration file: `start(root:)`, a list screen and a detail
+  screen registered from the root, and `serve()`.

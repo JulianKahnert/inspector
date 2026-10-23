@@ -35,6 +35,7 @@ swift run inspector --app <name> hello
 swift run inspector catalog
 swift run inspector state [path]
 swift run inspector send counter.set 42
+Tests/SkillScripts/integrate-remove.sh  # the skill's integrate.sh/remove.sh; --no-build, or test names
 ```
 
 Without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, an app that stops
