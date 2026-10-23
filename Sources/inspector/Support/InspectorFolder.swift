@@ -28,6 +28,51 @@ struct InspectorFolder: Equatable, Sendable {
         detail: "\(error)")
     }
   }
+
+  /// Records a call as `lastStep` in `run.json`: its command, its arguments and when it started.
+  ///
+  /// `logs.sh` reads the app's log from `at` on, so a failed step's log is in the window.
+  func recordStep(command: String, arguments: [String], at start: Date) throws {
+    let step: JSONValue = .object([
+      "command": .string(command),
+      "arguments": .array(arguments.map(JSONValue.string)),
+      "at": .string(start.formatted(Self.timestamp)),
+    ])
+    try updateRun { $0["lastStep"] = step }
+  }
+
+  /// Changes `run.json` and keeps every field the change leaves alone, so each command owns only
+  /// its own fields.
+  func updateRun(_ change: (inout [String: JSONValue]) -> Void) throws {
+    let file = url.appending(path: "run.json")
+    var run = (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(JSONValue.self, from: $0) }?
+      .objectValue ?? [:]
+    change(&run)
+    try Self.write(run, to: file)
+  }
+
+  /// Writes `config.json`, stamped with `writtenAt`; the one way the file is written, used by
+  /// `init` and by a session restart.
+  func writeConfig(_ config: InspectorConfig, at time: Date) throws {
+    var config = config
+    config.writtenAt = time
+    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    try Self.write(config, to: url.appending(path: "config.json"))
+  }
+
+  /// Milliseconds in UTC, so two quick steps stay in order.
+  private static let timestamp = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+
+  /// Pretty-printed with sorted keys, for a human who opens the file; written atomically, so a
+  /// concurrent reader never sees half a file.
+  private static func write(_ value: some Encodable, to file: URL) throws {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+    encoder.dateEncodingStrategy = .iso8601
+    var data = try encoder.encode(value)
+    data.append(contentsOf: Array("\n".utf8))
+    try data.write(to: file, options: .atomic)
+  }
 }
 
 /// `config.json`: which app and device the calls in this repository talk to.

@@ -78,6 +78,11 @@ struct Sandbox {
     return String(decoding: data, as: UTF8.self)
   }
 
+  /// The JSON document at `path`.
+  func json(_ path: String) throws -> JSONValue {
+    try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: url(path)))
+  }
+
   /// `environment`, running in the sandbox directory `path`.
   func environment(_ environment: Environment, in path: String = "") -> Environment {
     var environment = environment
