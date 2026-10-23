@@ -41,7 +41,7 @@ bash .claude/skills/inspector/tests/logs-test.sh   # the skill's logs.sh against
 bash .claude/skills/inspector/tests/integrate-remove-test.sh  # integrate.sh/remove.sh on throwaway repos; --no-build
 ```
 
-Commands through Xcode (`end`) need the signed binary: run them through
+Commands through Xcode (`capture`, `end`) need the signed binary: run them through
 `.claude/skills/inspector/scripts/inspector.sh`, which signs after every build; `swift run` and a
 bare `swift build` leave a signature Xcode refuses with `NOT_APPROVED`.
 

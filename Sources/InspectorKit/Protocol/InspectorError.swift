@@ -36,6 +36,15 @@ public enum ErrorCode: String, Codable, Equatable, Sendable {
   /// One of Xcode's tools failed; the message quotes Xcode's text, ``InspectorError/detail`` is
   /// that text alone.
   case xcodeError = "XCODE_ERROR"
+  /// A capture came back without the screen's hierarchy; ``InspectorError/detail`` is Xcode's
+  /// answer.
+  case noHierarchy = "NO_HIERARCHY"
+  /// No target on the screen has the identifier or label asked for; ``InspectorError/detail``
+  /// lists every target, as one line of JSON.
+  case targetNotFound = "TARGET_NOT_FOUND"
+  /// Targets at more than one point have the identifier or label asked for;
+  /// ``InspectorError/detail`` lists them, as one line of JSON.
+  case targetAmbiguous = "TARGET_AMBIGUOUS"
 }
 
 /// A rejection sent back in place of a normal response.

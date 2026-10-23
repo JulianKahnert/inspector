@@ -22,6 +22,7 @@ the CLI never gives up before the app.
 | `send <path> <json>` | Runs an action with a payload |
 | `send <path> [json] --until <match> [--timeout s]` | Runs the action, then answers once the state contains the match |
 | `wait <match> [--timeout s]` | The whole state document, once it contains the match |
+| `capture` | `{"screenshot","hierarchy","targets"}`: captures the simulator's screen in the session in `.inspector/config.json`. `targets` lists the controls as `{type, identifier?, label?, placeholder?, value?, hitPoint: [x, y]}`; `value` holds a field's typed text. Find a tap point with `jq '.targets[] \| select(.label == "Sichern")'` |
 | `end` | `{"session","xcode"}`: ends the Xcode session in `.inspector/config.json`; the app that session started ends with it. `xcode` is Xcode's answer, `{"userMessage":"Session doesn't exist anymore"}` for a session that already ended |
 
 ## `state` and paths
@@ -84,6 +85,7 @@ string), `optional` (`of`), `array` (`of`), `enum` (`values`: pass one of them a
 | `NO_SESSION` | `config.json` names no session, or the session ended and its app with it | `inspector init` |
 | `XCODE_TOO_OLD` | The selected Xcode has no `mcpbridge` | Ask the human to select Xcode 27.2 or newer |
 | `XCODE_ERROR` | An Xcode tool failed; `message` quotes Xcode | Read `message` |
+| `NO_HIERARCHY` | A capture came back without a hierarchy; `detail` is Xcode's answer | Capture again, else read the screenshot |
 | `NO_SIGNING_IDENTITY` | From `scripts/inspector.sh`: no "Apple Development" identity to sign with | Ask the human to add one in Xcode > Settings > Accounts |
 
 ## Several apps
