@@ -12,6 +12,9 @@ struct AppsCommand: InspectorCommand {
 
   @OptionGroup var options: AppOptions
 
+  /// Discovery needs no `.inspector/` folder and is no step of the loop.
+  static var isLoopStep: Bool { false }
+
   func answer(in environment: Environment) async throws(InspectorError) -> any Encodable {
     do {
       return try await listApps(in: environment)

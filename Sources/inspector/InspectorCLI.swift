@@ -53,6 +53,7 @@ struct InspectorCLI: AsyncParsableCommand {
       }
     }
     do throws(InspectorError) {
+      if type(of: command).isLoopStep { _ = try environment.folder() }
       return .answer(try await command.answer(in: environment))
     } catch {
       return .failure(error)
