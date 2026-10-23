@@ -42,7 +42,16 @@ struct SendCommand: InspectorCommand {
       payload: payload.first.map(Self.parsePayload),
       until: condition.match,
       untilTimeoutMs: condition.match == nil ? nil : condition.timeout.timeoutMs)
-    return try await environment.answer(to: .send(request), from: options.app)
+    let answer = try await environment.answer(to: .send(request), from: options.app)
+    guard let match = condition.match, let result = answer as? SendResult, !result.state.contains(match) else {
+      return answer
+    }
+    // An app answers a send with `until` only once the match holds. One built before `until`
+    // existed drops the key and answers at once; this keeps that from passing as success.
+    throw InspectorError(
+      code: .expectationFailed,
+      message: "the app answered before `\(WireJSON.line(match))` held; it may run an InspectorKit without until",
+      detail: WireJSON.line(result.state))
   }
 
   /// A payload argument is JSON if it parses as JSON, otherwise a plain string.

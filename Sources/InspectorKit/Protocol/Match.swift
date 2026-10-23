@@ -8,7 +8,7 @@ extension JSONValue {
   /// - A scalar matches only the same scalar; numbers compare by value, so `1` matches `1.0`.
   ///
   /// There are no operators: a condition beyond containment is a shell filter on `inspector state`.
-  func contains(_ match: JSONValue) -> Bool {
+  public func contains(_ match: JSONValue) -> Bool {
     switch (self, match) {
     case (_, .object(let expected)) where expected.isEmpty:
       return true
