@@ -63,6 +63,24 @@ struct ConditionCommandTests {
       ])
   }
 
+  @Test("send with --until to an app that ignores until fails instead of answering before the condition held")
+  func sendUntilToOlderApp() async throws {
+    let app = try await conditionApp()
+    let current = app.transport(nil)
+    // An app on an InspectorKit from before `until` decodes the send and drops the unknown keys.
+    let olderApp = Environment(
+      transport: { _ in RewritingTransport(base: current) }, instanceNames: { _ in ["DemoHost @ Mac"] })
+
+    let outcome = await InspectorCLI.outcome(
+      of: ["send", "counter.set", "7", "--until", #"{"counter":8}"#], in: olderApp)
+
+    #expect(
+      outcome
+        == .stderr(
+          #"{"code":"EXPECTATION_FAILED","detail":"{\"counter\":7,\"device\":{\"name\":\"Mac\",\"pid\":\"1\"}}","message":"the app answered before `{\"counter\":8}` held; it may run an InspectorKit without until"}"#
+        ))
+  }
+
   @Test("wait prints the state once the condition holds")
   func waitHolds() async throws {
     let outcome = await InspectorCLI.outcome(
@@ -135,6 +153,20 @@ private func conditionApp(recording log: RequestLog? = nil) async throws -> Envi
     return await core.handle(request)
   }
   return Environment(transport: { _ in transport }, instanceNames: { _ in ["DemoHost @ Mac"] })
+}
+
+/// Forwards every request with its `until` removed, as an app on an older InspectorKit reads it.
+private struct RewritingTransport: InspectorTransport {
+  var base: any InspectorTransport
+
+  func serve(_ handle: @escaping @Sendable (Request) async -> Response) async throws {}
+
+  func send(_ request: Request) async throws -> Response {
+    guard case .send(var send) = request else { return try await base.send(request) }
+    send.until = nil
+    send.untilTimeoutMs = nil
+    return try await base.send(.send(send))
+  }
 }
 
 /// Every request an in-process app received, in order.
