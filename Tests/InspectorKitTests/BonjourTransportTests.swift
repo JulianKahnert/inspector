@@ -55,6 +55,21 @@ struct BonjourTransportResponseTimeoutTests {
   }
 }
 
+@Suite("BonjourTransport.answer")
+struct BonjourTransportAnswerTests {
+  @Test("A hello answer names the instance the app was reached under")
+  func helloCarriesInstance() {
+    let response = BonjourTransport.answer(
+      .hello(Hello(app: "DemoHost", pid: 1, provider: "Inspector")), from: "DemoHost @ Mac")
+    #expect(response == .hello(Hello(app: "DemoHost", instance: "DemoHost @ Mac", pid: 1, provider: "Inspector")))
+  }
+
+  @Test("Every other answer passes through unchanged")
+  func otherAnswersUnchanged() {
+    #expect(BonjourTransport.answer(.state(.int(1)), from: "DemoHost @ Mac") == .state(.int(1)))
+  }
+}
+
 @Suite("BonjourTransport.discover")
 struct BonjourTransportDiscoverTests {
   @Test("A full instance name ends discovery at its first exact match, without the grace window")

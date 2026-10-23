@@ -31,6 +31,12 @@ public struct Catalog: Codable, Equatable, Sendable {
 public struct Hello: Codable, Equatable, Sendable {
   /// The name the app passed to `serve`.
   public var app: String
+  /// The full instance name the app was reached under, such as `DemoHost @ Mac`.
+  ///
+  /// The app never sets it: the CLI's transport fills it in with the name it connected to, so
+  /// a caller can store it and select exactly this app later. `nil` from a transport without
+  /// instance names.
+  public var instance: String?
   /// The app's process identifier.
   public var pid: Int
   /// The name of the conformer answering.
@@ -39,8 +45,9 @@ public struct Hello: Codable, Equatable, Sendable {
   public var provider: String
 
   /// Creates a hello answer.
-  public init(app: String, pid: Int, provider: String) {
+  public init(app: String, instance: String? = nil, pid: Int, provider: String) {
     self.app = app
+    self.instance = instance
     self.pid = pid
     self.provider = provider
   }

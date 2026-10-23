@@ -4,7 +4,7 @@
 ///
 /// | Request | Answered with |
 /// |---|---|
-/// | `{"t":"hello"}` | `{"t":"hello","app","pid","provider"}` |
+/// | `{"t":"hello"}` | `{"t":"hello","app","instance"?,"pid","provider"}` |
 /// | `{"t":"catalog"}` | `{"t":"catalog","actions":[…]}` |
 /// | `{"t":"state","path"?}` | `{"t":"state","state":…}` |
 /// | `{"t":"send","path","payload"?,"timeoutMs"?}` | `{"t":"sendResult","settled","state","diff"}` |

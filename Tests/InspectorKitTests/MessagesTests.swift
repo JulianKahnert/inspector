@@ -62,6 +62,14 @@ struct MessagesTests {
     #expect(line == #"{"app":"DemoHost","pid":1,"provider":"Inspector","t":"hello"}"#)
   }
 
+  @Test("hello carries the instance name once a transport has set it")
+  func helloWithInstance() throws {
+    let hello = Hello(app: "DemoHost", instance: "DemoHost @ Mac", pid: 1, provider: "Inspector")
+    let line = WireJSON.line(Response.hello(hello))
+    #expect(line == #"{"app":"DemoHost","instance":"DemoHost @ Mac","pid":1,"provider":"Inspector","t":"hello"}"#)
+    #expect(try JSONDecoder().decode(Response.self, from: Data(line.utf8)) == .hello(hello))
+  }
+
   @Test("An error carries the code and suggestions, and omits absent detail and empty suggestions")
   func errorOmitsAbsentFields() throws {
     let error = InspectorError(code: .unknownActionPath, message: "no action at `nope`")
