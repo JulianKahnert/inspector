@@ -22,6 +22,7 @@ struct InspectorCLI: AsyncParsableCommand {
       SendCommand.self,
       WaitCommand.self,
       CaptureCommand.self,
+      TapCommand.self,
       EndCommand.self,
     ])
 
