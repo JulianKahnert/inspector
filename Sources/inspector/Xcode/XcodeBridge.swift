@@ -135,9 +135,7 @@ final class XcodeBridge {
     }
     deadline.cancel()
     if await deadline.value {
-      let seconds = timeout / .seconds(1)
-      let shown = seconds.rounded() == seconds ? "\(Int(seconds))" : "\(seconds)"
-      throw InspectorError(code: .timeout, message: "Xcode did not answer `\(what)` within \(shown) s")
+      throw InspectorError(code: .timeout, message: "Xcode did not answer `\(what)` within \(timeout.inSeconds) s")
     }
     throw Self.exitedEarly(stderr: await process.finish())
   }
@@ -152,6 +150,14 @@ final class XcodeBridge {
         detail: detail)
     }
     return InspectorError(code: .xcodeError, message: "`xcrun mcpbridge` exited before it answered", detail: detail)
+  }
+}
+
+extension Duration {
+  /// The duration in seconds as a message shows it: `90` or `0.02`.
+  var inSeconds: String {
+    let seconds = self / .seconds(1)
+    return seconds.rounded() == seconds ? "\(Int(seconds))" : "\(seconds)"
   }
 }
 

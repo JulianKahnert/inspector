@@ -158,16 +158,16 @@ struct InitCommand: InspectorCommand {
   /// Opens the workspace and returns its identifier and active scheme.
   ///
   /// It is also the call that makes Xcode ask a human to approve this binary; Xcode answers it only
-  /// after the human confirmed.
-  private static func openWorkspace(
-    _ path: String, on xcode: XcodeBridge
+  /// after the human confirmed. Only Xcode's refusal means the binary is not approved: no answer
+  /// in time may be an Xcode still starting (once 62.9 s), so the agent runs `init` again, which
+  /// an unapproved binary then ends in the refusal.
+  static func openWorkspace(
+    _ path: String, on xcode: XcodeBridge, timeout: Duration = .seconds(90)
   ) async throws(InspectorError) -> (workspace: String, scheme: String?) {
     let opened: JSONValue
     do throws(InspectorError) {
-      opened = try await xcode.call(
-        "XcodeOpenWorkspace", ["path": .string(path)], timeout: .seconds(90)
-      ).json
-    } catch where [.notApproved, .timeout].contains(error.code) {
+      opened = try await xcode.call("XcodeOpenWorkspace", ["path": .string(path)], timeout: timeout).json
+    } catch where error.code == .notApproved {
       throw InspectorError(
         code: .notApproved,
         message: """
@@ -175,6 +175,14 @@ struct InitCommand: InspectorCommand {
           `\(XcodeBridge.signingIdentifier)`, then `inspector init` runs again
           """,
         detail: error.detail ?? error.message)
+    } catch where error.code == .timeout {
+      throw InspectorError(
+        code: .timeout,
+        message: """
+          Xcode did not open the workspace within \(timeout.inSeconds) s; a starting Xcode can take a minute, \
+          run `inspector init` again
+          """,
+        detail: error.message)
     }
     guard let workspace = opened.objectValue?["workspaceIdentifier"]?.stringValue else {
       throw InspectorError(

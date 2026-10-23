@@ -20,6 +20,7 @@ changes nothing.
 | `TIMEOUT` | `hello`, `state` or `send` found the app, which did not answer | Agent | Cold `init`: an app that was terminated leaves a Bonjour record behind for a while, which answers `TIMEOUT` instead of `APP_NOT_FOUND` |
 | `TIMEOUT` | Again right after a cold `init` | Human | The app sits at a breakpoint: continue it in Xcode's debugger |
 | `TIMEOUT` | From a command through Xcode: the bridge or a tool did not answer | Agent | `pgrep -x Xcode`; when Xcode is not running, `init` starts it |
+| `TIMEOUT` | From `init`: Xcode did not open the workspace within 90 s | Agent | `init` again; a starting Xcode can take a minute |
 
 ## State and actions
 
