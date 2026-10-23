@@ -62,7 +62,7 @@ struct InspectorCLI: AsyncParsableCommand {
     var folder: InspectorFolder?
     let outcome: Outcome
     do throws(InspectorError) {
-      if type(of: command).isLoopStep { folder = try environment.folder() }
+      if type(of: command).isLoopStep, !type(of: command).createsFolder { folder = try environment.folder() }
       outcome = .answer(substitutions.mask(answer: try await command.answer(in: environment)))
     } catch {
       outcome = .failure(substitutions.mask(error))

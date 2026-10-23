@@ -17,6 +17,8 @@ struct InitCommand: InspectorCommand {
       to build when the workspace has one of that name.
       """)
 
+  static let createsFolder = true
+
   @OptionGroup var options: AppOptions
 
   @Flag(help: "Only read `hello` and `state` of the serving app: no build, no new session.")
