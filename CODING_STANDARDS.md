@@ -21,7 +21,7 @@ The shared standards are generated from the Obsidian vault into `docs/coding-sta
 ### Architecture
 
 One rule shapes every change: `InspectorKit` is **framework-neutral and dependency-free**. The wire
-protocol is four operations (`hello`, `catalog`, `state`, `send`), and actions are catalog
+protocol is five operations (`hello`, `catalog`, `state`, `send`, `wait`), and actions are catalog
 data: a new action never needs CLI code or a new message type. A framework integration is another
 `Inspectable` conformer outside this package, never a special case inside it
 ([Two protocols](README.md#two-protocols)).
@@ -35,7 +35,7 @@ refactor.
 |---|---|
 | App and feature packages | `Inspector` (`shared`, `init`, `state`, both `action`s, both `serve`s), `Registration`, `BonjourTransport(name:)`, `TypeSchema`, `SchemaDescribable` |
 | Integrations | `Inspectable`, `Catalog`, `ActionNode`, `JSONValue` (+ accessors), `InspectorError`, `ErrorCode` |
-| Transports / CLIs | `InspectorTransport`, `BonjourTransport.instanceNames(browsingFor:)`, `Request`, `Response`, `SendRequest`, `SendResult`, `Hello`, `JSONDiffEntry`, `WireJSON` |
+| Transports / CLIs | `InspectorTransport`, `BonjourTransport.instanceNames(browsingFor:)`, `Request`, `Response`, `SendRequest`, `WaitRequest`, `SendResult`, `Hello`, `JSONDiffEntry`, `WireJSON` |
 
 `TupleField` and `TupleInput` are public because `TypeSchema.tuple` carries them.
 Every public symbol has a `///` comment; the DocC build must stay free of warnings.

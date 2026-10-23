@@ -11,11 +11,21 @@ struct MessagesTests {
       .hello, .catalog,
       .state(path: nil), .state(path: "counter"),
       .send(SendRequest(path: "counter.set", payload: 42, timeoutMs: 500)),
+      .send(SendRequest(path: "counter.set", payload: 42, until: .object(["counter": 42]), untilTimeoutMs: 1_000)),
+      .wait(WaitRequest(until: .object(["counter": 42]))),
+      .wait(WaitRequest(until: .object(["counter": 42]), timeoutMs: 1_000, baseline: .object(["counter": 0]))),
     ]
     for request in requests {
       let data = Data(WireJSON.line(request).utf8)
       #expect(try JSONDecoder().decode(Request.self, from: data) == request)
     }
+  }
+
+  @Test("A wait request is one flat line, the match under until")
+  func waitRequestLine() {
+    #expect(
+      WireJSON.line(Request.wait(WaitRequest(until: .object(["counter": 42]), timeoutMs: 1_000)))
+        == #"{"t":"wait","timeoutMs":1000,"until":{"counter":42}}"#)
   }
 
   @Test("A send request with no payload omits the key; one sending null keeps it")

@@ -2,15 +2,22 @@ import ArgumentParser
 import Foundation
 import InspectorKit
 
-/// `inspector send <path> [json]`: one action, answered with whether its effects settled, the
-/// new state and the diff.
+/// `inspector send <path> [json] [--until <match>]`: one action, answered with whether its
+/// effects settled, the new state and the diff; with `--until` once the state contains the match.
 struct SendCommand: InspectorCommand {
   static let configuration = CommandConfiguration(
     commandName: "send",
     abstract: "Sends one action and prints whether its effects settled, the new state and the diff.",
-    usage: "inspector send [--app <name>] <path> [<json>]")
+    usage: "inspector send [--app <name>] <path> [<json>] [--until <match> [--timeout <seconds>]]",
+    discussion: """
+      With --until, the answer waits until the state contains the match; the app checks it \
+      itself, so a screen that registers after the action is seen without polling. A condition \
+      that does not hold in time fails with EXPECTATION_FAILED, the last state in `detail`.
+      """)
 
   @OptionGroup var options: AppOptions
+
+  @OptionGroup var condition: UntilOptions
 
   @Argument(help: "The action's path, as `inspector catalog` lists it.")
   var path: String
@@ -32,8 +39,21 @@ struct SendCommand: InspectorCommand {
   func answer(in environment: Environment) async throws(InspectorError) -> any Encodable {
     var payload: JSONValue?
     if let raw = self.payload.first { payload = try Self.parsePayload(raw, filledFrom: environment) }
-    let request = SendRequest(path: path, payload: payload)
-    return try await environment.answer(to: .send(request), from: options.app)
+    let request = SendRequest(
+      path: path,
+      payload: payload,
+      until: condition.match,
+      untilTimeoutMs: condition.match == nil ? nil : condition.timeout.timeoutMs)
+    let answer = try await environment.answer(to: .send(request), from: options.app)
+    guard let match = condition.match, let result = answer as? SendResult, !result.state.contains(match) else {
+      return answer
+    }
+    // An app answers a send with `until` only once the match holds. One built before `until`
+    // existed drops the key and answers at once; this keeps that from passing as success.
+    throw InspectorError(
+      code: .expectationFailed,
+      message: "the app answered before `\(WireJSON.line(match))` held; it may run an InspectorKit without until",
+      detail: WireJSON.line(result.state))
   }
 
   /// A payload argument with its `${NAME}` placeholders filled from `.inspector/.env`.

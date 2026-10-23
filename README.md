@@ -5,7 +5,7 @@ Read the state of a running macOS or iOS app and steer it from the command line.
 ## Why inspector?
 
 - **Reach deep screens**: An agent sends the actions that lead to a screen instead of tapping through the UI, then reads what that screen shows as JSON.
-- **Built for agents**: Every answer is one JSON document, every rejection carries a machine-readable `code`, and the whole protocol is four operations.
+- **Built for agents**: Every answer is one JSON document, every rejection carries a machine-readable `code`, an action and the check of its outcome are one call, and the whole protocol is five operations.
 - **Actions are data**: The app registers state readers and actions at runtime. A new action needs no CLI code and no new message type.
 - **No dependencies**: Foundation and Network.framework only, compiled into debug builds.
 
@@ -69,7 +69,7 @@ flowchart LR
     Inspector --> Actions[Registered<br/>actions]
 ```
 
-**Four operations**: `hello`, `catalog`, `state` and `send`. Actions and their payload schemas travel as catalog data.
+**Five operations**: `hello`, `catalog`, `state`, `send` and `wait`. Actions and their payload schemas travel as catalog data. A condition is checked inside the app, so waiting for a screen costs no network round trip per check.
 
 ### Two protocols
 
@@ -89,7 +89,9 @@ flowchart LR
 ## The CLI
 
 ```
-inspector [--app name] apps | hello | catalog | state [path] | send <path> [json]
+inspector [--app name] apps | hello | catalog | state [path]
+                      | send <path> [json] [--until <match> [--timeout s]]
+                      | wait <match> [--timeout s]
 ```
 
 Against `demo-host`:
@@ -119,6 +121,14 @@ $ inspector send counter.sett
 $ inspector send counter.increment
 {"diff":[{"new":43,"old":42,"path":"counter"}],"settled":true,"state":{"counter":43,"device":{…}}}
 
+$ inspector send counter.set 42 --until '{"counter":42}'
+{"diff":[{"new":42,"old":43,"path":"counter"}],"settled":true,"state":{"counter":42,"device":{…}}}
+
+$ inspector wait '{"counter":42,"device":{}}'
+{"counter":42,"device":{"name":"…","pid":"39817"}}
+
+$ inspector wait '{"counter":99}' --timeout 1
+{"code":"EXPECTATION_FAILED","detail":"{\"counter\":42,\"device\":{…}}","message":"`{\"counter\":99}` did not hold within 1000 ms"}
 ```
 
 - **Several apps**: `inspector apps` lists every serving app and checks each with `hello`; an app that does not answer is listed with `"live":false`. Apps advertise as `<app> @ <device>`. With more than one app serving, every other command fails with `AMBIGUOUS_APP` until `--app` picks one by that name or its `<app>` part. With none, it fails with `APP_NOT_FOUND` after 5 seconds. A full instance name connects as soon as Bonjour reports it; the `<app>` part, or no `--app`, waits about 500 ms more for a second match, so a caller that talks to one app repeatedly passes the full name, which `hello` prints as `instance`.
@@ -126,6 +136,7 @@ $ inspector send counter.increment
 - **Errors**: A rejection goes to stderr as one JSON line and the CLI exits with 1. Branch on `code`, never on `message`.
 - **`didYouMean`**: For an unknown action path, lists the registered paths that share its last segment or its prefix.
 - **Payloads**: A `send` payload is parsed as JSON; anything that does not parse is sent as a string.
+- **Conditions**: `wait` and `send --until` take a match document, a JSON object the state has to contain. An empty object `{}` as a value asks only for the key to exist, an array matches as a prefix, a scalar exactly; there are no operators. The app checks it right away, whenever a state reader or an action is registered or cancelled, and every 25 ms, until it holds or `--timeout` passes (3 seconds by default). Then it fails with `EXPECTATION_FAILED` and the last state as JSON in `detail`. `send --until` answers like `send`, with the diff against the state before the action; `wait` prints the state. [ADR 004](docs/adr/004-cli.md#conditions) has the rules.
 
 ### The `.inspector/` folder
 
@@ -165,14 +176,14 @@ The rules per command are in [ADR 004](docs/adr/004-cli.md#the-inspector-folder)
 
 Claude Code gets this loop as the `inspector` skill in `.claude/skills/inspector/`, with scripts for each step. The app runs a debug build that registers state and actions and calls `serve()`.
 
-1. **Build the CLI once**, then call the binary directly. That skips the `swift run` check on every call, and one call then takes about 20–100 ms with `--app` set to the full instance name, or about 550 ms without it. Every call is bounded: without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, and an app that stops answering ends in `TIMEOUT`.
+1. **Build the CLI once**, then call the binary directly. That skips the `swift run` check on every call, and one call then takes about 20–100 ms with `--app` set to the full instance name, or about 550 ms without it. Every call is bounded: without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, an app that stops answering ends in `TIMEOUT`, and a condition that does not hold ends in `EXPECTATION_FAILED`.
 
 2. **Find out what is connected and what it offers.**
    - `dns-sd -B _inspector._tcp` lists every serving app under its device name. An app in the simulator advertises under the Mac's name.
    - `inspector hello` names the app that answered, its pid, and the full `instance` name to pass to `--app` from then on.
    - `inspector catalog` lists the actions with their payload schema, `inspector state` returns every registered state reader. Both grow as you navigate: a screen registers its readers and actions when its model is created, so a screen that has not been opened yet is missing.
 
-3. **Navigate to the screen** with one `send` per step. After each step that pushes a screen or presents a sheet, poll `inspector state` until that screen's key appears before you send the next action. It usually takes 100–200 ms. A `send` answer can come back with an empty `diff` even when a screen opened, because that screen registers its state only after the action has settled.
+3. **Navigate to the screen** with one `send --until` per step. A step that pushes a screen or presents a sheet names the screen's key, `send settings.open --until '{"settings.detail":{}}'`, and answers once that screen has registered its state, usually 100–200 ms later. Without `--until`, a `send` answer can come back with an empty `diff` even when a screen opened, because that screen registers its state only after the action has settled. `inspector wait '<match>'` waits the same way without sending anything.
 
 4. **Read the answer from the state.** `inspector state` gives the whole document, and every `send` answer carries the `diff` it caused. The path in `inspector state <path>` is split at every dot, so a top-level key that itself contains a dot, such as `chat.draft`, is only reachable through the whole document: filter it locally, for example with `jq '."chat.draft"'`.
 
