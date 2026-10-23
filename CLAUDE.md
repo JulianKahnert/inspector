@@ -39,6 +39,7 @@ swift run inspector send counter.set 42 --until '{"counter":42}'
 swift run inspector wait '{"counter":42}' --timeout 1
 bash .claude/skills/inspector/tests/logs-test.sh   # the skill's logs.sh against a fake xcrun
 bash .claude/skills/inspector/tests/integrate-remove-test.sh  # integrate.sh/remove.sh on throwaway repos; --no-build
+bash .claude/skills/inspector/tests/inspector-sh-test.sh      # inspector.sh's rebuild and signing, through a symlink
 ```
 
 Commands through Xcode (`capture`, `end`) need the signed binary: run them through
@@ -54,9 +55,14 @@ What each answer looks like is under [The CLI](README.md#the-cli).
 ## Driving a running app to debug it
 
 Load the `inspector` skill (`.claude/skills/inspector/`) whenever a change has to be checked in a
-running app. It owns the whole loop and its scripts: building the CLI, finding the serving app,
-navigating, waiting for a screen's state, screenshots, and the error codes. Keep those details in
-the skill and link to it from here, the same way the usage examples live only in the README.
+running app. It owns the whole loop and its scripts: building and signing the CLI, `init`,
+navigating, gestures, diagnosis, the integration scripts, and every error code with its next step.
+Keep those details in the skill and link to it from here, the same way the usage examples live
+only in the README.
+
+Other repositories load the skill through the symlink `~/.claude/skills/inspector` to this
+checkout's skill directory, so the branch checked out here is the skill and the CLI every session
+runs; `inspector.sh` rebuilds the CLI on its next call when a source is newer than the binary.
 
 ## Usage examples
 

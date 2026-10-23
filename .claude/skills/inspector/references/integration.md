@@ -6,9 +6,10 @@ exactly three places change, each marked `// DEBUG INSPECTOR` (in a plist,
 `<!-- DEBUG INSPECTOR -->`): the dependency in the manifest or project, one call in the app's entry
 point, and the two `Info.plist` keys. Registering from a feature package is the exception.
 
-A repository either keeps the integration (committed, guarded by `#if DEBUG`) or never commits it.
-For the second kind, `scripts/integrate.sh` does steps 1, 2 and 4 below and `scripts/remove.sh`
-undoes them: see [Ephemeral integration](#ephemeral-integration).
+A repository keeps the integration in one of two modes. **Permanent**: committed; see
+[Permanent integration](#permanent-integration). **Ephemeral**: never committed;
+`scripts/integrate.sh` does steps 1, 2 and 4 below and `scripts/remove.sh` undoes them, see
+[Ephemeral integration](#ephemeral-integration).
 
 ## 1. Add the dependency
 
@@ -48,9 +49,11 @@ Design the state so an agent never needs a screenshot to know what the screen sh
 write a registration, go through the screen and list what a user sees and can do there:
 
 - **That it's open and loaded**: its key exists while the screen does, plus a loading flag.
-  `wait-state.sh` waits on exactly that.
+  `--until` waits on exactly that.
 - **What it shows**: title and subtitle, the rows of a list with id and visible text, counts,
-  badges, the selected item.
+  badges, the selected item, each in the unit the screen shows. A value the app stores scaled (a
+  meter reading in thousandths of a kWh) is registered as displayed, or its key names the unit
+  (`readingMilli`), so no caller has to guess the factor.
 - **What the user can do**: every flag that enables, hides or disables a control
   (`canDeleteReading`, `isSaveEnabled`).
 - **What else is presented**: a sheet, an alert or an error message, an empty state.
@@ -60,7 +63,7 @@ When a screenshot later shows something the task needed and this state lacks, ad
 ### Registration rules
 
 - **Per screen, the state that tells you it's open and loaded**: the rows of a list, a loading
-  flag, the selected id. `wait-state.sh` waits on exactly that.
+  flag, the selected id. `--until` waits on exactly that.
 - **Per step of the route, one action** that calls the same method a tap calls. A route that
   bypasses the UI's entry point proves nothing about the UI.
 - **Top-level state keys without dots** (`featureDetail`, not `feature.detail`): the CLI splits
@@ -70,7 +73,8 @@ When a screenshot later shows something the task needed and this state lacks, ad
   `featureList.open` takes an index, `featureDetail.tapMeterID` a meter id. The catalog lists both
   as `{"kind":"int"}`, so the name is the only hint a caller gets.
 - **A close action for every sheet and pushed screen** you register (`featureDetail.close`). The
-  inspector has no generic back or dismiss, so without one a route can't undo its last step.
+  inspector has no generic back or dismiss; a sheet without one can only be closed by a
+  `tap --target` on its close or cancel button, which needs the simulator.
 - **`[weak self]` in every closure.** A reader whose model is gone then reads `null` instead of
   keeping it alive, and re-registering on the next screen replaces it.
 - **A setter that is `private` or `private(set)`** can only be reached from an extension in the
@@ -113,6 +117,17 @@ marker of its own.
 
 Build the package for the platform you debug on, then the app. Run the app and check with
 `scripts/inspector.sh hello` and `catalog` that your paths show up.
+
+## Permanent integration
+
+For a repository that commits the integration, such as an app whose debug builds always serve:
+
+- `DebugInspector.swift` and its call stay behind `#if DEBUG`, and the release configuration
+  leaves the file out with `EXCLUDED_SOURCE_FILE_NAMES`.
+- `.inspector/` is in `.gitignore`.
+- The app's own docs (its `CLAUDE.md`) name a release check: build the release configuration and
+  check that the binary has no `InspectorKit` symbol (`nm <binary> | grep -c InspectorKit` is 0)
+  and its `Info.plist` no `NSBonjourServices`.
 
 ## Ephemeral integration
 
@@ -199,16 +214,5 @@ The base is `--base <ref>`, else the default branch of the current branch's remo
 ### Errors
 
 Both scripts answer like the CLI: one JSON document on stdout, a failure as one JSON line with
-`code` on stderr and exit 1, a usage error with exit 64.
-
-| `code` | What to do |
-|---|---|
-| `ALREADY_INTEGRATED` | Run `remove.sh` first |
-| `STORE_INVALID` | Keep exactly one `DebugInspector.swift` below the store folder, under its target path |
-| `TARGET_DIR_MISSING`, `TARGET_UNKNOWN` | Fix the store's path, or pass `--package-target` |
-| `NEEDS_PROJECT_DEPENDENCY` | Do the one step in Xcode, or pass `--package` (above) |
-| `DEPENDENCY_FAILED` | `detail` has `add-to-package.sh`'s output; a target written on one line needs its arguments on separate lines |
-| `PACKAGE_NOT_FOUND`, `PLIST_NOT_FOUND`, `PLIST_INVALID` | Fix the path, or convert a binary plist with `plutil -convert xml1` |
-| `INTEGRATION_LEFT` | Run `remove.sh`; for a `diff` or `tracked` finding in a commit, change the commit |
-| `BASE_NOT_FOUND` | Pass `--base <branch>` |
-| `NOT_A_REPO`, `NOT_AN_APP_REPO` | Pass an app's checkout, not a plain folder or the inspector repository |
+`code` on stderr and exit 1, a usage error with exit 64. Every code and its next step:
+`errors.md` → *Integration scripts*.

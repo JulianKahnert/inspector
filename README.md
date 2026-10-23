@@ -215,6 +215,14 @@ A refused binary ends in `NOT_APPROVED`, an ended session whose app is gone in `
 
 Claude Code gets this loop as the `inspector` skill in `.claude/skills/inspector/`, with scripts for each step. The app runs a debug build that registers state and actions and calls `serve()`.
 
+To use the skill in every repository, link it once per machine:
+
+```sh
+ln -s ~/GIT/inspector/.claude/skills/inspector ~/.claude/skills/inspector
+```
+
+Its `scripts/inspector.sh` follows the link back to this checkout, builds the CLI when the binary is missing or older than a source file or the manifest, and signs it, so a session in another repository needs only the checkout, Swift and the link.
+
 1. **Build the CLI once**, then call the binary directly. That skips the `swift run` check on every call, and one call then takes about 20–100 ms with `--app` set to the full instance name, or about 550 ms without it. Every call is bounded: without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, an app that stops answering ends in `TIMEOUT`, and a condition that does not hold ends in `EXPECTATION_FAILED`.
 
 2. **Find out what is connected and what it offers.**
@@ -316,6 +324,8 @@ The skill's scripts have shell tests in `.claude/skills/inspector/tests/`. The o
 ```sh
 bash .claude/skills/inspector/tests/integrate-remove-test.sh              # about 30 s
 bash .claude/skills/inspector/tests/integrate-remove-test.sh --no-build   # skips the build
+bash .claude/skills/inspector/tests/logs-test.sh                          # logs.sh against a fake xcrun
+bash .claude/skills/inspector/tests/inspector-sh-test.sh                  # rebuild and signing, through a symlink
 ```
 
 ## References
