@@ -64,6 +64,22 @@ struct DeviceSession {
     "inspector-\(repository)-\(time.formatted(stamp))"
   }
 
+  /// Starts the session `name` in `workspace` and returns the UDID of the device Xcode chose;
+  /// `device` asks for one, otherwise Xcode takes the scheme's run destination and boots it if
+  /// needed.
+  ///
+  /// - Throws: every error of ``XcodeBridge/call(_:_:timeout:)``, Xcode's rejection of a name in
+  ///   use or of a device in another session as ``ErrorCode/xcodeError``.
+  static func start(
+    _ name: String, workspace: String, device: String?, on xcode: XcodeBridge
+  ) async throws(InspectorError) -> String? {
+    var arguments: [String: JSONValue] = ["sessionIdentifier": .string(name), "workspaceIdentifier": .string(workspace)]
+    if let device { arguments["deviceIdentifier"] = .string(device) }
+    // Booting a simulator for the session can take a while.
+    let started = try await xcode.call("DeviceInteractionStartWorkspaceSession", arguments, timeout: .seconds(120))
+    return started.json.objectValue?["deviceUUID"]?.stringValue ?? device
+  }
+
   private static let stamp = Date.VerbatimFormatStyle(
     format: """
       \(year: .defaultDigits)\(month: .twoDigits)\(day: .twoDigits)-\
@@ -87,12 +103,7 @@ struct DeviceSession {
       await Self.answersHello(app, in: environment)
     else { throw noSession(error) }
     let newName = Self.newName(repository: folder.url.deletingLastPathComponent().lastPathComponent, at: environment.now())
-    _ = try await xcode.call(
-      "DeviceInteractionStartWorkspaceSession",
-      [
-        "sessionIdentifier": .string(newName), "workspaceIdentifier": .string(workspace),
-        "deviceIdentifier": .string(udid),
-      ])
+    _ = try await Self.start(newName, workspace: workspace, device: udid, on: xcode)
     // Read again right before writing, so a field another call changed in the meantime survives.
     var latest = (try folder.config()) ?? config
     latest.session = newName

@@ -14,10 +14,15 @@ protocol InspectorCommand: ParsableCommand {
   /// Whether the command is a step of the loop: it looks up `.inspector/` and records itself as
   /// `lastStep` in `run.json`. Every command is, except discovery.
   static var isLoopStep: Bool { get }
+
+  /// Whether the command creates `.inspector/`, so a folder `INSPECTOR_DIR` names that does not
+  /// exist yet is no error. Only `init` does.
+  static var createsFolder: Bool { get }
 }
 
 extension InspectorCommand {
   static var isLoopStep: Bool { true }
+  static var createsFolder: Bool { false }
 }
 
 /// The options every command takes.
