@@ -66,7 +66,7 @@ struct InitCommandTests {
 
       let project = sandbox.url("app/App/Demo.xcodeproj").path
       let config =
-        #"{"app":"DemoHost","bundleId":"com.example.demo","instance":"DemoHost @ Mac","logSubsystem":"com.example.demo","scheme":"DemoHost","session":"inspector-app-20261019-085320","udid":"UDID-1","workspace":"workspace-1","writtenAt":"2026-10-19T08:53:20Z"}"#
+        #"{"app":"DemoHost","bundleId":"com.example.demo","instance":"DemoHost @ Mac","logSubsystem":"com.example.","scheme":"DemoHost","session":"inspector-app-20261019-085320","udid":"UDID-1","workspace":"workspace-1","writtenAt":"2026-10-19T08:53:20Z"}"#
       #expect(
         outcome
           == .stdout(
@@ -197,6 +197,18 @@ struct InitCommandTests {
       #expect(try sandbox.json("elsewhere/.inspector/run.json")["lastStep"]?["command"] == "init")
       #expect(!processes.commands.contains { $0.first == "/usr/bin/git" })
     }
+  }
+
+  @Test(
+    "logSubsystem is the bundle ID's vendor prefix, so the app's packages are covered; a short ID stays whole",
+    arguments: [
+      ("de.juliankahnert.RoommateAlbert", "de.juliankahnert."),
+      ("com.example.demo.debug", "com.example."),
+      ("com.example", "com.example"),
+      ("demo", "demo"),
+    ])
+  func logSubsystem(bundleID: String, expected: String) {
+    #expect(InitCommand.logSubsystem(forBundleID: bundleID) == expected)
   }
 
   @Test("init without --reset never uninstalls")

@@ -178,7 +178,7 @@ The rules per command are in [ADR 004](docs/adr/004-cli.md#the-inspector-folder)
 
 ```console
 $ scripts/inspector.sh init | jq -c .config      # from the app's repository
-{"app":"RoommateAlbert","bundleId":"de.juliankahnert.RoommateAlbert","instance":"RoommateAlbert @ <host>","logSubsystem":"de.juliankahnert.RoommateAlbert","scheme":"RoommateAlbert","session":"inspector-RoommateAlbert-20260101-132548","udid":"6D1A3C55-2B8E-4F1A-9C77-0E5B2A4D8F10","workspace":"workspace-Xy12AbC3dE","writtenAt":"2026-10-23T13:26:00Z"}
+{"app":"RoommateAlbert","bundleId":"de.juliankahnert.RoommateAlbert","instance":"RoommateAlbert @ <host>","logSubsystem":"de.juliankahnert.","scheme":"RoommateAlbert","session":"inspector-RoommateAlbert-20260101-132548","udid":"6D1A3C55-2B8E-4F1A-9C77-0E5B2A4D8F10","workspace":"workspace-Xy12AbC3dE","writtenAt":"2026-10-23T13:26:00Z"}
 $ scripts/inspector.sh end
 {"session":"inspector-RoommateAlbert-20260101-132548","xcode":{"userMessage":"Session stopped"}}
 ```

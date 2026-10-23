@@ -34,7 +34,7 @@ Run `scripts/inspector.sh init` from the app's repository. It ends once `state` 
 - **Warm** (`--warm`; you decide that no code changed since the last run): only `hello` and `state` of the app that serves, well under a second, no build, the session untouched. It finds only an app that runs outside a session, for example after `xcrun simctl launch <udid> <bundleId>` of the installed build, because the app of an expired session is gone.
 - **`--reset`** uninstalls the app before the install, which deletes its data. Use it only when the task needs a fresh app; init never logs in.
 - **`--app <name>`** picks the app when several serve, and the scheme to build when the workspace has a scheme of that name. **`--workspace <path>`** picks the workspace when the repository has several.
-- `config.json` gets every field, `instance` being the full name `hello` reported; `.inspector/` goes into `.git/info/exclude` when nothing ignores it yet.
+- `config.json` gets every field, `instance` being the full name `hello` reported and `logSubsystem` the bundle ID's vendor prefix (`de.juliankahnert.`), so `logs.sh` covers the app's packages too; `.inspector/` goes into `.git/info/exclude` when nothing ignores it yet.
 
 | What happened | `code` | Next step |
 |---|---|---|
