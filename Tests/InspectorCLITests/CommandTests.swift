@@ -164,6 +164,25 @@ struct CommandTests {
         ))
   }
 
+  @Test("apps lists an app that never answers as not live after 2 seconds, even when it ignores cancellation")
+  func appsBoundsASilentApp() async throws {
+    let silent = SilentTransport()
+    let environment = Environment(transport: { _ in silent }, instanceNames: { _ in ["Stuck @ Mac"] })
+    // Ends the silence in any case, so a broken bound shows as a failure instead of a hang.
+    let rescue = Task {
+      try? await Task.sleep(for: .seconds(8))
+      await silent.end()
+    }
+
+    let started = ContinuousClock.now
+    let outcome = await InspectorCLI.outcome(of: ["apps"], in: environment)
+
+    #expect(ContinuousClock.now - started < .seconds(5))
+    #expect(outcome == .stdout(#"[{"live":false,"name":"Stuck @ Mac"}]"#))
+    rescue.cancel()
+    await silent.end()
+  }
+
   @Test("apps fails with BAD_REQUEST when browsing fails")
   func appsBrowseFailure() async {
     let environment = Environment(
@@ -212,6 +231,26 @@ private struct ConnectionRefused: Error, CustomStringConvertible {
 }
 
 /// A transport whose every send fails with `error`.
+/// A transport whose app never answers until `end()`; cancelling the call does not end the wait,
+/// as with a Network connection.
+private actor SilentTransport: InspectorTransport {
+  private var ended = false
+  private var waiting: [CheckedContinuation<Void, Never>] = []
+
+  nonisolated func serve(_ handle: @escaping @Sendable (Request) async -> Response) async throws {}
+
+  func send(_ request: Request) async throws -> Response {
+    if !ended { await withCheckedContinuation { waiting.append($0) } }
+    throw InspectorError(code: .timeout, message: "no answer")
+  }
+
+  func end() {
+    ended = true
+    waiting.forEach { $0.resume() }
+    waiting.removeAll()
+  }
+}
+
 private struct FailingTransport: InspectorTransport {
   var error: any Error
 
