@@ -10,6 +10,14 @@ protocol InspectorCommand: ParsableCommand {
   ///
   /// - Throws: the ``InspectorError`` the call ends with.
   func answer(in environment: Environment) async throws(InspectorError) -> any Encodable
+
+  /// Whether the command is a step of the loop: it looks up `.inspector/` and records itself as
+  /// `lastStep` in `run.json`. Every command is, except discovery.
+  static var isLoopStep: Bool { get }
+}
+
+extension InspectorCommand {
+  static var isLoopStep: Bool { true }
 }
 
 /// The options every command takes.

@@ -16,6 +16,9 @@ public enum ErrorCode: String, Codable, Equatable, Sendable {
   case ambiguousApp = "AMBIGUOUS_APP"
   /// The app was found but did not answer in time.
   case timeout = "TIMEOUT"
+  /// The call needs the `.inspector/` folder and there is none; ``InspectorError/detail`` is the
+  /// path where it was expected.
+  case noConfig = "NO_CONFIG"
 }
 
 /// A rejection sent back in place of a normal response.

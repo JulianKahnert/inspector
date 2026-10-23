@@ -236,7 +236,7 @@ extension Outcome {
 
 /// demo-host's registrations, served in-process: a counter that `counter.set` and
 /// `counter.increment` change.
-private func demoApp() async throws -> Environment {
+func demoApp() async throws -> Environment {
   let counter = Mutex(0)
   let inspector = Inspector()
   inspector.state("counter") { counter.withLock { $0 } }
