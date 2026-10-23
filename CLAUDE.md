@@ -38,7 +38,7 @@ swift run inspector send counter.set 42
 swift run inspector send counter.set 42 --until '{"counter":42}'
 swift run inspector wait '{"counter":42}' --timeout 1
 bash .claude/skills/inspector/tests/logs-test.sh   # the skill's logs.sh against a fake xcrun
-Tests/SkillScripts/integrate-remove.sh  # the skill's integrate.sh/remove.sh; --no-build, or test names
+bash .claude/skills/inspector/tests/integrate-remove-test.sh  # integrate.sh/remove.sh on throwaway repos; --no-build
 ```
 
 Without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, an app that stops
