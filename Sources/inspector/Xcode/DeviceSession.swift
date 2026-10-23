@@ -30,7 +30,7 @@ struct DeviceSession {
 
   /// Ends the session; the app it started ends with it.
   ///
-  /// - Throws: Xcode's error as it is, also for a session that has already ended.
+  /// - Throws: Xcode's error as it is. A session that already ended is no error to Xcode.
   func end(on xcode: XcodeBridge) async throws(InspectorError) -> ToolResult {
     try await xcode.call(SessionTool.endSession.rawValue, [SessionTool.endSession.sessionParameter: .string(name)])
   }

@@ -12,11 +12,13 @@ struct EndCommandTests {
       try sandbox.makeDirectory("app/.git")
       let config = #"{"session":"inspector-app-20261023-101500","udid":"UDID-1"}"#
       try sandbox.write("app/.inspector/config.json", config)
-      let xcode = FakeXcode { _ in .text("Session stopped") }
+      let xcode = FakeXcode { _ in .text(#"{"userMessage":"Session stopped"}"#) }
 
       let outcome = await InspectorCLI.outcome(of: ["end"], in: sandbox.environment(xcode.environment(), in: "app"))
 
-      #expect(outcome == .stdout(#"{"message":"Session stopped","session":"inspector-app-20261023-101500"}"#))
+      #expect(
+        outcome
+          == .stdout(#"{"session":"inspector-app-20261023-101500","xcode":{"userMessage":"Session stopped"}}"#))
       #expect(
         xcode.calls == [
           FakeXcode.Call(
@@ -26,21 +28,35 @@ struct EndCommandTests {
     }
   }
 
-  @Test("end on a session that already ended relays Xcode's error and starts no new one")
+  @Test("end on a session that already ended relays Xcode's answer as it is and starts no new one")
   func expiredSession() async throws {
     try await Sandbox.run { sandbox in
       try sandbox.makeDirectory("app/.git")
       try sandbox.write("app/.inspector/config.json", #"{"session":"old","udid":"UDID-1","workspace":"w1"}"#)
-      let xcode = FakeXcode { _ in .error("Session doesn't exist anymore") }
+      // Xcode 27.2 does not flag this answer as an error.
+      let xcode = FakeXcode { _ in .text(#"{"userMessage":"Session doesn't exist anymore"}"#) }
+
+      let outcome = await InspectorCLI.outcome(of: ["end"], in: sandbox.environment(xcode.environment(), in: "app"))
+
+      #expect(outcome == .stdout(#"{"session":"old","xcode":{"userMessage":"Session doesn't exist anymore"}}"#))
+      #expect(xcode.calls.map(\.tool) == ["DeviceInteractionEndSession"])
+    }
+  }
+
+  @Test("end relays a failure Xcode flags as XCODE_ERROR")
+  func failedEnd() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", #"{"session":"old"}"#)
+      let xcode = FakeXcode { _ in .error(#"{"data":"Xcode is busy","type":"error"}"#) }
 
       let outcome = await InspectorCLI.outcome(of: ["end"], in: sandbox.environment(xcode.environment(), in: "app"))
 
       #expect(
         outcome
           == .stderr(
-            #"{"code":"XCODE_ERROR","detail":"Session doesn't exist anymore","message":"`DeviceInteractionEndSession` failed: Session doesn't exist anymore"}"#
+            #"{"code":"XCODE_ERROR","detail":"{\"data\":\"Xcode is busy\",\"type\":\"error\"}","message":"`DeviceInteractionEndSession` failed: {\"data\":\"Xcode is busy\",\"type\":\"error\"}"}"#
           ))
-      #expect(xcode.calls.map(\.tool) == ["DeviceInteractionEndSession"])
     }
   }
 
