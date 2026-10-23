@@ -2,15 +2,22 @@ import ArgumentParser
 import Foundation
 import InspectorKit
 
-/// `inspector send <path> [json]`: one action, answered with whether its effects settled, the
-/// new state and the diff.
+/// `inspector send <path> [json] [--until <match>]`: one action, answered with whether its
+/// effects settled, the new state and the diff; with `--until` once the state contains the match.
 struct SendCommand: InspectorCommand {
   static let configuration = CommandConfiguration(
     commandName: "send",
     abstract: "Sends one action and prints whether its effects settled, the new state and the diff.",
-    usage: "inspector send [--app <name>] <path> [<json>]")
+    usage: "inspector send [--app <name>] <path> [<json>] [--until <match> [--timeout <seconds>]]",
+    discussion: """
+      With --until, the answer waits until the state contains the match; the app checks it \
+      itself, so a screen that registers after the action is seen without polling. A condition \
+      that does not hold in time fails with EXPECTATION_FAILED, the last state in `detail`.
+      """)
 
   @OptionGroup var options: AppOptions
+
+  @OptionGroup var condition: UntilOptions
 
   @Argument(help: "The action's path, as `inspector catalog` lists it.")
   var path: String
@@ -30,7 +37,11 @@ struct SendCommand: InspectorCommand {
   }
 
   func answer(in environment: Environment) async throws(InspectorError) -> any Encodable {
-    let request = SendRequest(path: path, payload: payload.first.map(Self.parsePayload))
+    let request = SendRequest(
+      path: path,
+      payload: payload.first.map(Self.parsePayload),
+      until: condition.match,
+      untilTimeoutMs: condition.match == nil ? nil : condition.timeout.timeoutMs)
     return try await environment.answer(to: .send(request), from: options.app)
   }
 
