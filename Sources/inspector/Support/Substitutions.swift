@@ -8,6 +8,8 @@ import Synchronization
 /// the error on stderr and `run.json`. Only these values are masked; the CLI guesses nothing from
 /// key names.
 final class Substitutions: Sendable {
+  // A lock, not an actor: `record` runs inside the synchronous `placeholderValues(in:)` and `mask`
+  // in synchronous closures such as `arguments.map`; an actor would make both async for a dictionary.
   private let values = Mutex<[String: String]>([:])
 
   /// Notes the values a call filled in, by name.

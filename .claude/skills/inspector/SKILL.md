@@ -111,7 +111,8 @@ keys. A repository keeps it in one of two modes:
 
 - **Permanent**: committed behind `#if DEBUG`, left out of release builds with
   `EXCLUDED_SOURCE_FILE_NAMES`, `.inspector/` in `.gitignore`; the app's own docs name its release
-  check (no InspectorKit symbol, no `NSBonjourServices`).
+  check (no InspectorKit symbol, no `NSBonjourServices`). The call line goes inside `#if DEBUG`
+  too, because a release build without the file cannot resolve `DebugInspector`.
 - **Ephemeral**: never committed. The file and an `.env` live in the store,
   `~/.claude/inspector/integrations/<repo>/<target path>/`. Run
   `scripts/integrate.sh <repo> --from ~/.claude/inspector/integrations/<repo>` (`--into <target

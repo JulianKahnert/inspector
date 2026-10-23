@@ -34,7 +34,7 @@ refactor.
 | Audience | Public |
 |---|---|
 | App and feature packages | `Inspector` (`shared`, `init`, `state`, both `action`s, both `serve`s), `Registration`, `BonjourTransport(name:)`, `TypeSchema`, `SchemaDescribable` |
-| Integrations | `Inspectable`, `Catalog`, `ActionNode`, `JSONValue` (+ accessors), `InspectorError`, `ErrorCode` |
+| Integrations | `Inspectable`, `Catalog`, `ActionNode`, `JSONValue` (+ accessors, and `contains(_:)`, the match rule the CLI re-checks a `send --until` answer with), `InspectorError`, `ErrorCode` |
 | Transports / CLIs | `InspectorTransport`, `BonjourTransport.instanceNames(browsingFor:)`, `Request`, `Response`, `SendRequest`, `WaitRequest`, `SendResult`, `Hello`, `JSONDiffEntry`, `WireJSON` |
 
 `TupleField` and `TupleInput` are public because `TypeSchema.tuple` carries them.
