@@ -7,7 +7,9 @@ import Testing
 
 @Suite("Device session")
 struct DeviceSessionTests {
-  private static let notFound = "Session not found. It may have already been closed, or the identifier is wrong"
+  // What `DeviceInteractionSynthesize` answers, with `isError`, for a session Xcode does not know.
+  private static let notFound =
+    #"{"data":"Session not found. It may have already been closed, or the identifier is wrong","type":"error"}"#
   private static let config = """
     {"instance":"DemoHost @ Mac","session":"inspector-app-1","udid":"UDID-1","workspace":"workspace-1"}
     """

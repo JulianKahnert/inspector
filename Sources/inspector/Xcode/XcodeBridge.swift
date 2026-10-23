@@ -161,4 +161,10 @@ struct ToolResult: Equatable, Sendable {
   var text: String
   /// Its `structuredContent`, when it has one.
   var structured: JSONValue?
+
+  /// The text as JSON: Xcode's tools answer with a JSON document as text; anything else is a
+  /// string.
+  var json: JSONValue {
+    (try? JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))) ?? .string(text)
+  }
 }
