@@ -211,6 +211,14 @@ run "$repo" FAKE_EXIT=149 FAKE_ERROR=$'Unable to lookup in current state: Shutdo
 expect "exit code" 1 "$code"
 expect "stderr" '{"code":"BAD_REQUEST","detail":"Unable to lookup in current state: Shutdown","message":"`log show` failed on simulator `SIM-UDID`"}' "$err"
 
+scenario "a complaint with quotes, newlines and control characters stays one JSON line, escaped as jq escapes"
+inspector_folder "$repo" "$config" "$step"
+complaint=$'line "one"\\\n\ttwo\x01\x1b[0m\x7f'
+run "$repo" FAKE_EXIT=1 FAKE_ERROR="$complaint" --
+expect "exit code" 1 "$code"
+expect "stderr" "$(jq -nSc --arg detail "$complaint" \
+  '{code: "BAD_REQUEST", detail: $detail, message: "`log show` failed on simulator `SIM-UDID`"}')" "$err"
+
 scenario "--help prints the usage on stdout and exits 0"
 run "$repo" -- --help
 expect "exit code" 0 "$code"

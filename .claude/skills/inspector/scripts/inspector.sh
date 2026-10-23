@@ -10,25 +10,13 @@
 # Test:  bash .claude/skills/inspector/tests/inspector-sh-test.sh
 set -euo pipefail
 
-# -P resolves the symlink, so `..` climbs the checkout and not the directory holding the link.
-repo_root="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-binary="$repo_root/.build/debug/inspector"
+# Sets $inspector_root, the checkout, also when this script is reached through a symlink.
+# shellcheck source=lib/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+binary="$inspector_root/.build/debug/inspector"
 # Xcode approves the parent process of `xcrun mcpbridge` by team ID plus this identifier, so every
 # build signed with it keeps the approval.
 identifier="de.juliankahnert.inspector"
-
-# fail <code> <message> [detail]: the CLI's error line on stderr, exit code 1.
-fail() {
-  local detail=""
-  [[ $# -ge 3 ]] && detail=",\"detail\":\"$(escaped "$3")\""
-  printf '{"code":"%s"%s,"message":"%s"}\n' "$1" "$detail" "$(escaped "$2")" >&2
-  exit 1
-}
-
-escaped() {
-  local s="${1//\\/\\\\}"
-  printf '%s' "${s//\"/\\\"}"
-}
 
 signing_identity() {
   if [[ -n "${INSPECTOR_SIGNING_IDENTITY:-}" ]]; then
@@ -43,14 +31,14 @@ signing_identity() {
 # Directories count too: deleting a source file makes its directory newer.
 stale() {
   [[ ! -x "$binary" || "${INSPECTOR_REBUILD:-0}" == 1 ]] && return 0
-  [[ -n "$(find "$repo_root/Sources" "$repo_root/Package.swift" "$repo_root/Package.resolved" \
+  [[ -n "$(find "$inspector_root/Sources" "$inspector_root/Package.swift" "$inspector_root/Package.resolved" \
     -newer "$binary" -print -quit 2>/dev/null)" ]]
 }
 
 if stale; then
   # Build output goes to stderr, so stdout stays one JSON document per call.
-  swift build --package-path "$repo_root" --product inspector >&2 ||
-    fail BUILD_FAILED "could not build the inspector CLI; the compiler's output is above" "$repo_root"
+  swift build --package-path "$inspector_root" --product inspector >&2 ||
+    fail BUILD_FAILED "could not build the inspector CLI; the compiler's output is above" "$(json_str "$inspector_root")"
   # An up-to-date build leaves the binary as it was; date it now, or every call would build again.
   touch "$binary"
 fi
