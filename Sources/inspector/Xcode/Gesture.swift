@@ -7,6 +7,8 @@ enum Gesture: Sendable {
   case tap(Point)
   /// A tap at the hit point of the one target whose identifier or label is the name.
   case tapTarget(String)
+  /// A finger moved from one point to another, over a duration in seconds or Xcode's default.
+  case swipe(from: Point, to: Point, duration: Double?)
 
   /// Performs the gesture in the session `.inspector/config.json` names and, with `condition`,
   /// waits in the app until its state contains the match.
@@ -50,6 +52,8 @@ enum Gesture: Sendable {
     case .tapTarget(let name):
       let target = try Target.resolve(name, in: try await session.capture(on: xcode, in: environment).targets)
       return Performed(gesture: "t \(target.hitPoint.command)", target: target)
+    case .swipe(let start, let end, let duration):
+      return Performed(gesture: "t \(start.command) f \(end.command)" + (duration.map { " \($0.command)" } ?? ""))
     }
   }
 
@@ -68,13 +72,16 @@ enum Gesture: Sendable {
 }
 
 extension Point {
-  /// The point as Xcode's interaction commands take it: `x y`, whole numbers without a fraction.
-  var command: String {
-    "\(Self.command(x)) \(Self.command(y))"
+  /// The point as Xcode's interaction commands take it: `x y`.
+  fileprivate var command: String {
+    "\(x.command) \(y.command)"
   }
+}
 
-  private static func command(_ value: Double) -> String {
-    guard value == value.rounded(), abs(value) < 1e15 else { return String(value) }
-    return String(Int(value))
+extension Double {
+  /// The number as Xcode's interaction commands take it: a whole number without a fraction.
+  fileprivate var command: String {
+    guard self == rounded(), abs(self) < 1e15 else { return String(self) }
+    return String(Int(self))
   }
 }
