@@ -27,6 +27,27 @@ struct Target: Codable, Equatable, Sendable {
     hierarchy.split(whereSeparator: \.isNewline).compactMap { target(in: $0) }
   }
 
+  /// The one target in `targets` whose identifier or label is `name`.
+  ///
+  /// Matches at one point count as one: the hierarchy lists some elements twice.
+  ///
+  /// - Throws: ``ErrorCode/targetNotFound`` with every target in `detail`,
+  ///   ``ErrorCode/targetAmbiguous`` with the matches in `detail`.
+  static func resolve(_ name: String, in targets: [Target]) throws(InspectorError) -> Target {
+    let matches = targets.filter { $0.identifier == name || $0.label == name }
+    guard let first = matches.first else {
+      throw InspectorError(
+        code: .targetNotFound, message: "no target has the identifier or label `\(name)`",
+        detail: WireJSON.line(targets))
+    }
+    guard matches.allSatisfy({ $0.hitPoint == first.hitPoint }) else {
+      throw InspectorError(
+        code: .targetAmbiguous, message: "\(matches.count) targets have the identifier or label `\(name)`",
+        detail: WireJSON.line(matches))
+    }
+    return first
+  }
+
   private static func target(in line: Substring) -> Target? {
     guard let match = try? element.wholeMatch(in: line) else { return nil }
     let type = String(match.type)
