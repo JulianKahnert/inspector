@@ -25,7 +25,8 @@ for flag in "$@"; do
   esac
 done
 
-skill_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# -P: reached through a symlink such as `~/.claude/skills/inspector`, `..` has to climb the checkout.
+skill_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 inspector_root="$(cd "$skill_dir/../../.." && pwd)"
 # SwiftPM names a local package after its directory; the product reference has to use that name.
 identity="$(basename "$inspector_root")"
