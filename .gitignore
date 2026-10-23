@@ -2,3 +2,4 @@
 .build.nosync/
 .swiftpm/
 .DS_Store
+.inspector/
