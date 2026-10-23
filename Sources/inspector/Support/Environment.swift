@@ -88,6 +88,21 @@ struct Environment: Sendable {
   /// - Throws: the app's rejection, a discovery or timeout error from the transport, and
   ///   ``ErrorCode/badRequest`` for anything else that keeps the request from the app.
   func answer(to request: Request, from app: String?) async throws(InspectorError) -> any Encodable {
+    switch try await response(to: request, from: app) {
+    case .hello(let hello): return hello
+    case .catalog(let catalog): return catalog
+    case .state(let state): return state
+    case .sendResult(let result): return result
+    case .error(let error): throw error
+    }
+  }
+
+  /// Sends `request` to the app `app` selects and returns its response, for a command that
+  /// prints only part of it.
+  ///
+  /// - Throws: the same errors as ``answer(to:from:)``; an `.error` response is thrown, never
+  ///   returned.
+  func response(to request: Request, from app: String?) async throws(InspectorError) -> Response {
     var selector = app
     if selector == nil { selector = try folder()?.config()?.selector }
     let response: Response
@@ -98,12 +113,7 @@ struct Environment: Sendable {
     } catch {
       throw InspectorError(code: .badRequest, message: "could not reach the app", detail: "\(error)")
     }
-    switch response {
-    case .hello(let hello): return hello
-    case .catalog(let catalog): return catalog
-    case .state(let state): return state
-    case .sendResult(let result): return result
-    case .error(let error): throw error
-    }
+    if case .error(let error) = response { throw error }
+    return response
   }
 }

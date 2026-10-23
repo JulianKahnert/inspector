@@ -178,6 +178,22 @@ struct InspectorTests {
     #expect(try await inspector.state() == .object(["counter": 0]))
   }
 
+  @Test("Every registration and every cancelled one notifies an observer, until it stops observing")
+  func registrationObservers() {
+    let inspector = Inspector()
+    let changes = Mutex(0)
+    let observation = inspector.observeRegistrations { changes.withLock { $0 += 1 } }
+
+    let state = inspector.state("counter") { 0 }
+    let action = inspector.action("counter.reset") {}
+    state.cancel()
+    action.cancel()
+    observation.cancel()
+    inspector.state("device") { "Mac" }
+
+    #expect(changes.withLock { $0 } == 4)
+  }
+
   @Test("A stale token's cancel() leaves a newer registration on the same path in place")
   func staleCancelKeepsNewerRegistration() async throws {
     let inspector = Inspector()

@@ -5,7 +5,8 @@ stderr and exit code 1; branch on `code`, never on `message`. A usage error exit
 
 `scripts/inspector.sh` takes the same arguments and builds the CLI when it is missing. The CLI
 bounds every call itself: discovery gives up after 5 s with `APP_NOT_FOUND`, and an app that stops
-answering ends in `TIMEOUT` after 5 s, or after a `send`'s settle timeout plus 5 s.
+answering ends in `TIMEOUT` after 5 s, or after a `send`'s settle timeout plus 5 s; a condition's
+timeout (`--timeout`, 3 s by default) is added on top, so the CLI never gives up before the app.
 
 ## Commands
 
@@ -17,6 +18,8 @@ answering ends in `TIMEOUT` after 5 s, or after a `send`'s settle timeout plus 5
 | `state <path>` | The value at a dotted path inside the state document |
 | `send <path>` | Runs an action that takes no payload |
 | `send <path> <json>` | Runs an action with a payload |
+| `send <path> [json] --until <match> [--timeout s]` | Runs the action, then answers once the state contains the match |
+| `wait <match> [--timeout s]` | The whole state document, once it contains the match |
 
 ## `state` and paths
 
@@ -37,12 +40,21 @@ answering ends in `TIMEOUT` after 5 s, or after a `send`'s settle timeout plus 5
     after its closure returned.
   - `state` is that after-state.
 - An action that starts a push or presents a sheet returns before the new screen exists, so its
-  `diff` can be empty although the screen opens. Wait for the screen's key with
-  `scripts/wait-state.sh` instead.
+  `diff` can be empty although the screen opens. Name the screen's key instead:
+  `send settings.open --until '{"settings.detail":{}}'` answers once it registered, with the diff
+  against the state before the action.
 - The app side gives an action 5 seconds by default.
 - `${NAME}` in the payload is filled from `.inspector/.env` (see below), for example
   `send session.login '{"user":"${USER}","password":"${SECRET}"}'`. The answer, an error and
   `run.json` show each filled-in value as `${NAME}`, a number equal to one as the string `"${NAME}"`.
+
+## Conditions: `wait` and `--until`
+
+The match is a JSON object the state has to contain: `{}` as a value asks only for the key, an
+array matches as a prefix, a scalar exactly (`1` matches `1.0`), and keys are taken as written
+(`"settings.detail"` is one key). No operators; for `>` or a regex use `scripts/wait-state.sh` with a
+`jq` filter. The app checks the match itself, right after the action, on every registration and
+every 25 ms, so `--until` costs no extra round trips.
 
 ## Payload schemas in the catalog
 
@@ -62,6 +74,7 @@ string), `optional` (`of`), `array` (`of`), `enum` (`values`: pass one of them a
 | `APP_NOT_FOUND` | No serving app within 5 s, or none matches `--app` | Check that a debug build is running and serving, and the name in `inspector apps` |
 | `AMBIGUOUS_APP` | Several apps serve and no `--app` picks one. `detail` lists their instance names | Repeat the call with `--app <name>` |
 | `TIMEOUT` | The app was found but did not answer in time | Check that the app is still running and not stopped in the debugger |
+| `EXPECTATION_FAILED` | The condition did not hold before `--timeout`. `detail` is the last state as a JSON string | Read it with `jq -r .detail \| jq`; then logs or a screenshot explain why |
 | `NO_CONFIG` | The call needs `.inspector/` and there is none, or `INSPECTOR_DIR` names nothing. `detail` is the expected path | Create the folder there, or fix `INSPECTOR_DIR` |
 | `ENV_MISSING` | A `${NAME}` in the payload has no value in `.inspector/.env`. `detail` lists the names | Add them to `.inspector/.env`; nothing was sent |
 
