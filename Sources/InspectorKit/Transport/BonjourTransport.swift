@@ -66,8 +66,15 @@ public struct BonjourTransport: InspectorTransport {
       guard case .response(let response) = try await connection.receive().content else {
         throw InspectorError(code: .badRequest, message: "unexpected message from app")
       }
-      return response
+      return Self.answer(response, from: endpoint.name)
     }
+  }
+
+  /// `response` as the CLI reports it: a hello answer names the `instance` it came from.
+  static func answer(_ response: Response, from instance: String) -> Response {
+    guard case .hello(var hello) = response else { return response }
+    hello.instance = instance
+    return .hello(hello)
   }
 
   /// The one endpoint `app` selects among the services Bonjour finds.
