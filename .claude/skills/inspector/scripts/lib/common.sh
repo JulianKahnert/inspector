@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared by integrate.sh and remove.sh; sourced, never run. Works with the bash 3.2 macOS ships.
+# Shared by the skill's scripts; sourced, never run. Works with the bash 3.2 macOS ships.
 # Output follows the CLI: one JSON document on stdout, a failure as one JSON line with `code` on
 # stderr and exit 1, a usage error as message plus usage on stderr and exit 64.
 
@@ -9,14 +9,21 @@ inspector_root="$(cd "$skill_dir/../../.." && pwd)"
 # shellcheck disable=SC2034 # used by the scripts that source this file
 marker='DEBUG INSPECTOR'
 
-# json_str <text>: the text as a JSON string literal.
+# json_str <text>: the text as a JSON string literal, escaped as jq escapes it.
 json_str() {
-  local s="$1"
+  local s="$1" code character
   s="${s//\\/\\\\}"
   s="${s//\"/\\\"}"
   s="${s//$'\n'/\\n}"
   s="${s//$'\r'/\\r}"
   s="${s//$'\t'/\\t}"
+  s="${s//$'\b'/\\b}"
+  s="${s//$'\f'/\\f}"
+  # Every other control character; a bash string cannot hold NUL. `printf -v` forks nothing.
+  for code in 01 02 03 04 05 06 07 0b 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f; do
+    printf -v character '%b' "\\x$code"
+    s="${s//$character/\\u00$code}"
+  done
   printf '"%s"' "$s"
 }
 
@@ -45,6 +52,52 @@ usage_error() {
   # shellcheck disable=SC2154 # each script sets $usage
   printf 'Error: %s\n%s\n' "$1" "$usage" >&2
   exit 64
+}
+
+# standardize <path>: absolute, without `.` and `..` components, like the CLI's standardized URL.
+standardize() {
+  local path="$1" part
+  local -a parts=() components
+  [[ "$path" == /* ]] || path="$(pwd -P)/$path"
+  IFS=/ read -ra components <<<"$path"
+  for part in "${components[@]}"; do
+    case "$part" in
+      '' | .) ;;
+      ..) [[ ${#parts[@]} -gt 0 ]] && unset 'parts[${#parts[@]}-1]' ;;
+      *) parts+=("$part") ;;
+    esac
+  done
+  local IFS=/
+  printf '/%s\n' "${parts[*]-}"
+}
+
+# locate_inspector_folder: sets $folder to `INSPECTOR_DIR` when it is set, otherwise to the first
+# `.inspector/` from the working directory up to the repository root (the first directory with a
+# `.git`), or fails with NO_CONFIG and the path expected: the lookup the CLI does.
+locate_inspector_folder() {
+  if [[ -n "${INSPECTOR_DIR:-}" ]]; then
+    folder="$(standardize "$INSPECTOR_DIR")"
+    [[ -d "$folder" ]] || no_inspector_folder "$folder"
+    return
+  fi
+  local start dir
+  start="$(pwd -P)"
+  dir="$start"
+  while :; do
+    if [[ -d "$dir/.inspector" ]]; then
+      folder="$dir/.inspector"
+      return
+    fi
+    [[ ! -e "$dir/.git" ]] || no_inspector_folder "$dir/.inspector"
+    [[ "$dir" != / ]] || no_inspector_folder "${start%/}/.inspector"
+    dir="$(dirname "$dir")"
+  done
+}
+
+# no_inspector_folder <expected path>: the CLI's NO_CONFIG failure.
+no_inspector_folder() {
+  # shellcheck disable=SC2016 # the backticks are literal code spans, as in the CLI's message
+  fail NO_CONFIG 'no `.inspector/` folder; run `inspector init`' "$(json_str "$1")"
 }
 
 # repo_root <dir>: the repository's top-level directory, or nothing for a directory outside git.

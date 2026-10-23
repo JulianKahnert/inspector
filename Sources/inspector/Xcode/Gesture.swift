@@ -12,36 +12,33 @@ enum Gesture: Sendable {
   /// Text typed on the keyboard into the focused field.
   case type(String)
 
-  /// Performs the gesture in the session `.inspector/config.json` names and, with `condition`,
-  /// waits in the app until its state contains the match.
+  /// Performs the gesture in the session `.inspector/config.json` names and, with `wait`, waits in
+  /// the app until its state contains the match.
   ///
-  /// With a condition the answer is the app's ``SendResult``, diffed against the state read right
-  /// before the gesture; without one, ``Performed``. A target is resolved from a capture in the
+  /// With a wait the answer is the app's ``SendResult``, diffed against the state read right
+  /// before the gesture, which replaces `wait`'s baseline; without one, ``Performed``. A target is resolved from a capture in the
   /// same bridge, before the state is read.
   ///
   /// - Throws: ``ErrorCode/noConfig`` and ``ErrorCode/noSession`` before anything is sent, the
   ///   errors of ``Target/resolve(_:in:)`` before the gesture, every error of
   ///   ``DeviceSession/call(_:_:timeout:on:in:)``, and the app's errors, such as
   ///   ``ErrorCode/expectationFailed`` with the last state in `detail`.
-  func perform(until condition: UntilOptions, app: String?, in environment: Environment) async throws(InspectorError)
+  func perform(until wait: WaitRequest?, app: String?, in environment: Environment) async throws(InspectorError)
     -> any Encodable
   {
     var session = try DeviceSession(in: environment)
     let (performed, baseline, result) = try await environment.withXcode { xcode throws(InspectorError) in
       let performed = try await resolved(in: &session, on: xcode, in: environment)
       var baseline: JSONValue?
-      if condition.match != nil { baseline = try await Self.state(of: app, in: environment) }
+      if wait != nil { baseline = try await Self.baseline(of: app, session: session.name, in: environment) }
       let result = try await session.call(
         .synthesize, ["interactionCommand": .string(performed.gesture)], on: xcode, in: environment)
       return (performed, baseline, result)
     }
     Artifacts(of: result).record(in: session.folder)
-    guard let match = condition.match else { return performed }
-    let wait = WaitRequest(until: match, timeoutMs: condition.timeout.timeoutMs, baseline: baseline)
-    guard case .sendResult(let answer) = try await environment.response(to: .wait(wait), from: app) else {
-      throw InspectorError(code: .badRequest, message: "unexpected answer to wait")
-    }
-    return answer
+    guard var wait else { return performed }
+    wait.baseline = baseline
+    return try await environment.wait(wait, from: app)
   }
 
   /// The command `DeviceInteractionSynthesize` takes for the gesture, with the target it aims at.
@@ -62,11 +59,20 @@ enum Gesture: Sendable {
     }
   }
 
-  private static func state(of app: String?, in environment: Environment) async throws(InspectorError) -> JSONValue {
-    guard case .state(let state) = try await environment.response(to: .state(path: nil), from: app) else {
-      throw InspectorError(code: .badRequest, message: "unexpected answer to state")
+  /// The state before the gesture.
+  ///
+  /// An app that does not answer has died, and for a gesture its session with it: Xcode's
+  /// `Session not found` comes only after the gesture, which must not run without its baseline.
+  private static func baseline(
+    of app: String?, session: String, in environment: Environment
+  ) async throws(InspectorError) -> JSONValue {
+    do throws(InspectorError) {
+      return try await environment.state(from: app)
+    } catch where [.appNotFound, .timeout].contains(error.code) {
+      throw InspectorError(
+        code: .noSession, message: "the app of the session `\(session)` does not answer; run `inspector init`",
+        detail: error.message)
     }
-    return state
   }
 
   /// What a gesture without a condition answers: the command Xcode ran, and the target it aimed at.

@@ -36,7 +36,7 @@ struct DeviceSessionTests {
       #expect(
         xcode.calls == [
           FakeXcode.Call(
-            tool: tool.rawValue, arguments: [parameter: "inspector-app-1", "interactionCommand": "t 1 2"])
+            tool: tool.tool.rawValue, arguments: [parameter: "inspector-app-1", "interactionCommand": "t 1 2"])
         ])
     }
   }

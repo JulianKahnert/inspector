@@ -95,17 +95,18 @@ remove_integration() {
     ' "$root/$file"
   done < <(git -C "$root" grep --untracked -l -I -e "$marker" || true)
 
-  # 5. The exclude entry, unless another worktree of the repository still has an integration.
+  # 5. The exclude entry, integrate.sh's or init's (both write the same marked pair), unless another
+  #    worktree of the repository still has a .inspector/ folder: an integration or a session.
   local exclude other keep=0
   exclude="$(exclude_file "$root")"
   while IFS= read -r other; do
     [[ "$(cd "$other" 2>/dev/null && pwd -P)" == "$(cd "$root" && pwd -P)" ]] && continue
-    [[ -d "$other/.inspector/integration" ]] && keep=1
+    [[ -d "$other/.inspector" ]] && keep=1
   done < <(git -C "$root" worktree list --porcelain | sed -n 's/^worktree //p')
   if [[ $keep -eq 0 && -f "$exclude" ]]; then
-    perl -0pi -e 's{^# DEBUG INSPECTOR\n/\.inspector/\n}{}m' "$exclude"
+    perl -0pi -e 's{^# DEBUG INSPECTOR\n/\.inspector/\n}{}gm' "$exclude"
   fi
-  [[ $keep -eq 0 ]] || notes+=("kept the .inspector/ exclude entry: another worktree of this repository is integrated")
+  [[ $keep -eq 0 ]] || notes+=("kept the .inspector/ exclude entry: another worktree of this repository has a .inspector/ folder")
 
   # 6. The session binding goes with the integration.
   rm -rf "$root/.inspector"

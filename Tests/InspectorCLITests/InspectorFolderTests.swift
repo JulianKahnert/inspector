@@ -206,29 +206,29 @@ struct InspectorFolderTests {
       let environment = sandbox.environment(try await echoApp())
 
       let outcome = await InspectorCLI.outcome(
-        of: ["send", "login", #"{"user":"team","password":"${SECRET}"}"#], in: environment)
+        of: ["send", "submit", #"{"owner":"team","token":"${SECRET}"}"#], in: environment)
 
       #expect(outcome.exitCode == 0)
       #expect(
         await InspectorCLI.outcome(of: ["state", "received"], in: environment)
-          == .stdout(#"{"password":"pa\"ss","user":"team"}"#))
+          == .stdout(#"{"owner":"team","token":"pa\"ss"}"#))
     }
   }
 
   @Test("a placeholder without a value fails with ENV_MISSING naming every missing variable; nothing is sent")
   func envMissing() async throws {
     try await Sandbox.run { sandbox in
-      try sandbox.write(".inspector/.env", "USER=team\n")
+      try sandbox.write(".inspector/.env", "OWNER=team\n")
       let environment = sandbox.environment(try await echoApp())
 
       let outcome = await InspectorCLI.outcome(
-        of: ["send", "login", #"{"user":"${USER}","password":"${PASSWORD}","otp":"${OTP}"}"#], in: environment)
+        of: ["send", "submit", #"{"owner":"${OWNER}","token":"${TOKEN}","code":"${CODE}"}"#], in: environment)
 
       let dotenv = sandbox.url(".inspector/.env").path
       #expect(
         outcome
           == .stderr(
-            #"{"code":"ENV_MISSING","detail":"PASSWORD OTP","message":"no value for `${PASSWORD}`, `${OTP}` in `\#(dotenv)`"}"#
+            #"{"code":"ENV_MISSING","detail":"TOKEN CODE","message":"no value for `${TOKEN}`, `${CODE}` in `\#(dotenv)`"}"#
           ))
       #expect(await InspectorCLI.outcome(of: ["state", "received"], in: environment) == .stdout("null"))
     }
@@ -269,7 +269,7 @@ struct InspectorFolderTests {
       try sandbox.write(".inspector/.env", "VALUE=42\n")
 
       let outcome = await InspectorCLI.outcome(
-        of: ["send", "login", #"{"code":"${VALUE}"}"#], in: sandbox.environment(try await echoApp()))
+        of: ["send", "submit", #"{"code":"${VALUE}"}"#], in: sandbox.environment(try await echoApp()))
 
       #expect(
         outcome
@@ -317,13 +317,13 @@ struct InspectorFolderTests {
       try sandbox.write(".inspector/.env", "VALUE=42\n")
 
       _ = await InspectorCLI.outcome(
-        of: ["send", "login", #"{"a":"${VALUE}","b":"42"}"#], in: sandbox.environment(try await echoApp()))
+        of: ["send", "submit", #"{"a":"${VALUE}","b":"42"}"#], in: sandbox.environment(try await echoApp()))
 
       #expect(
         try sandbox.json(".inspector/run.json")
           == .object([
             "lastStep": .object([
-              "arguments": .array(["send", "login", #"{"a":"${VALUE}","b":"${VALUE}"}"#]),
+              "arguments": .array(["send", "submit", #"{"a":"${VALUE}","b":"${VALUE}"}"#]),
               "at": "2026-10-19T08:53:20.250Z",
               "command": "send",
             ])
@@ -349,16 +349,16 @@ struct InspectorFolderTests {
   @Test("only filled-in values are masked: no key name, and no .env value the payload did not use")
   func noKeywordHeuristic() async throws {
     try await Sandbox.run { sandbox in
-      try sandbox.write(".inspector/.env", "USER=team\nPASSWORD=unused\n")
+      try sandbox.write(".inspector/.env", "OWNER=team\nSECRET=unused\n")
 
       let outcome = await InspectorCLI.outcome(
-        of: ["send", "login", #"{"user":"${USER}","password":"unused","token":"abc"}"#],
+        of: ["send", "submit", #"{"owner":"${OWNER}","secret":"unused","token":"abc"}"#],
         in: sandbox.environment(try await echoApp()))
 
       #expect(
         outcome
           == .stdout(
-            #"{"diff":[{"new":{"password":"unused","token":"abc","user":"${USER}"},"old":null,"path":"received"}],"settled":true,"state":{"motto":"the answer is 42","received":{"password":"unused","token":"abc","user":"${USER}"}}}"#
+            #"{"diff":[{"new":{"owner":"${OWNER}","secret":"unused","token":"abc"},"old":null,"path":"received"}],"settled":true,"state":{"motto":"the answer is 42","received":{"owner":"${OWNER}","secret":"unused","token":"abc"}}}"#
           ))
     }
   }

@@ -50,7 +50,7 @@ public struct BonjourTransport: InspectorTransport {
     let notFound = InspectorError(
       code: .appNotFound,
       message: name.map { "no serving app matches `\($0)`" } ?? "no serving app found")
-    let endpoint: Bonjour.Endpoint = try await Self.first(within: .seconds(5), orThrow: notFound) {
+    let endpoint: Bonjour.Endpoint = try await withDeadline(.seconds(5), orThrow: notFound) {
       try await Self.browse(for: name, orThrow: notFound)
     }
 
@@ -58,7 +58,7 @@ public struct BonjourTransport: InspectorTransport {
     let timedOut = InspectorError(
       code: .timeout,
       message: "`\(endpoint.name)` did not answer within \(responseTimeout.components.seconds) s")
-    return try await Self.first(within: responseTimeout, orThrow: timedOut) {
+    return try await withDeadline(responseTimeout, orThrow: timedOut) {
       let connection = NetworkConnection(to: endpoint) {
         Coder(WireMessage.self, using: .json) { TCP() }
       }
@@ -66,12 +66,13 @@ public struct BonjourTransport: InspectorTransport {
       guard case .response(let response) = try await connection.receive().content else {
         throw InspectorError(code: .badRequest, message: "unexpected message from app")
       }
-      return Self.answer(response, from: endpoint.name)
+      return Self.stampingInstance(endpoint.name, on: response)
     }
   }
 
-  /// `response` as the CLI reports it: a hello answer names the `instance` it came from.
-  static func answer(_ response: Response, from instance: String) -> Response {
+  /// `response` with `instance` stamped on it when it is a hello answer, so `hello` names the
+  /// instance the CLI reached; every other answer as it is.
+  static func stampingInstance(_ instance: String, on response: Response) -> Response {
     guard case .hello(var hello) = response else { return response }
     hello.instance = instance
     return .hello(hello)
@@ -81,23 +82,22 @@ public struct BonjourTransport: InspectorTransport {
   private static func browse(for app: String?, orThrow notFound: InspectorError) async throws -> Bonjour.Endpoint {
     let (updates, continuation) = AsyncStream.makeStream(
       of: [Bonjour.Endpoint].self, bufferingPolicy: .bufferingNewest(1))
-    return try await withThrowingTaskGroup { group in
-      group.addTask {
-        let _: Void = try await NetworkBrowser(for: .bonjour(serviceType, domain: nil, includeTxtRecord: false))
-          .run { endpoints in
-            continuation.yield(endpoints)
-            return .continue
-          }
-      }
-      defer { group.cancelAll() }
-      let match = try await discover(app, in: updates, name: \.name) {
-        // A guess at how long a second app on the same network takes to show up; not measured.
-        try await Task.sleep(for: .milliseconds(500))
-        continuation.finish()
-      }
-      guard let match else { throw notFound }
-      return match
+    // Cancelled, never awaited: the browser may not end on cancellation (see `withDeadline`).
+    let browser = Task {
+      let _: Void = try await NetworkBrowser(for: .bonjour(serviceType, domain: nil, includeTxtRecord: false))
+        .run { endpoints in
+          continuation.yield(endpoints)
+          return .continue
+        }
     }
+    defer { browser.cancel() }
+    let match = try await discover(app, in: updates, name: \.name) {
+      // A guess at how long a second app on the same network takes to show up; not measured.
+      try await Task.sleep(for: .milliseconds(500))
+      continuation.finish()
+    }
+    guard let match else { throw notFound }
+    return match
   }
 
   /// The one endpoint `app` selects from a browser's `updates`, or `nil` when none does.
@@ -171,22 +171,25 @@ public struct BonjourTransport: InspectorTransport {
   /// The instance names of every app that advertises ``serviceType`` within `duration`, sorted.
   public static func instanceNames(browsingFor duration: Duration) async throws -> [String] {
     // Only the latest endpoint list matters; older ones are superseded, never merged.
-    let (updates, continuation) = AsyncStream.makeStream(of: [String].self, bufferingPolicy: .bufferingNewest(1))
-    try await withThrowingTaskGroup { group in
-      group.addTask {
+    let (updates, continuation) = AsyncThrowingStream.makeStream(
+      of: [String].self, bufferingPolicy: .bufferingNewest(1))
+    // Cancelled, never awaited: the browser may not end on cancellation (see `withDeadline`).
+    let browser = Task {
+      do {
         let _: Void = try await NetworkBrowser(for: .bonjour(serviceType, domain: nil, includeTxtRecord: false))
           .run { endpoints in
             continuation.yield(endpoints.map(\.name))
             return .continue
           }
+      } catch {
+        continuation.finish(throwing: error)
       }
-      group.addTask { try await Task.sleep(for: duration) }
-      try await group.next()
-      group.cancelAll()
     }
+    defer { browser.cancel() }
+    try await Task.sleep(for: duration)
     continuation.finish()
     var names: [String] = []
-    for await latest in updates { names = latest }
+    for try await latest in updates { names = latest }
     return Set(names).sorted()
   }
 
@@ -209,23 +212,6 @@ public struct BonjourTransport: InspectorTransport {
         detail: matches.joined(separator: ", "))
     }
     return matches.first
-  }
-
-  private static func first<Value: Sendable>(
-    within duration: Duration,
-    orThrow timeoutError: InspectorError,
-    _ operation: @escaping @Sendable () async throws -> Value
-  ) async throws -> Value {
-    try await withThrowingTaskGroup { group in
-      group.addTask { try await operation() }
-      group.addTask {
-        try await Task.sleep(for: duration)
-        throw timeoutError
-      }
-      defer { group.cancelAll() }
-      guard let value = try await group.next() else { throw timeoutError }
-      return value
-    }
   }
 }
 
