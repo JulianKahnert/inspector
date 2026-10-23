@@ -82,7 +82,7 @@ flowchart LR
 - `Sources/inspector/` - The CLI, on swift-argument-parser: one file per command in `Commands/`, registered in `InspectorCLI.swift`
 - `Sources/demo-host/` - A fake app on the Mac for manual checks
 - `Tests/InspectorKitTests/` - In-process tests, no sockets
-- `Tests/InspectorCLITests/` - Every command's exact output, run against an in-process app
+- `Tests/InspectorCLITests/` - Every command's exact output, run against an in-process app, and the `.inspector/` folder in a temporary directory
 - `.claude/skills/inspector/` - The Claude Code skill for driving a running app
 
 ## The CLI
@@ -136,6 +136,40 @@ $ inspector wait '{"counter":99}' --timeout 1
 - **`didYouMean`**: For an unknown action path, lists the registered paths that share its last segment or its prefix.
 - **Payloads**: A `send` payload is parsed as JSON; anything that does not parse is sent as a string.
 - **Conditions**: `wait` and `send --until` take a match document, a JSON object the state has to contain. An empty object `{}` as a value asks only for the key to exist, an array matches as a prefix, a scalar exactly; there are no operators. The app checks it right away, whenever a state reader or an action is registered or cancelled, and every 25 ms, until it holds or `--timeout` passes (3 seconds by default). Then it fails with `EXPECTATION_FAILED` and the last state as JSON in `detail`. `send --until` answers like `send`, with the diff against the state before the action; `wait` prints the state. [ADR 004](docs/adr/004-cli.md#conditions) has the rules.
+
+### The `.inspector/` folder
+
+Each call is its own process, so a folder in the app's repository root binds the calls to one app. Every command but `apps` looks for `.inspector/` from the working directory up to the repository root, or takes the folder `INSPECTOR_DIR` names. Without it, the commands work as above.
+
+```console
+$ mkdir .inspector
+$ echo '{"instance":"DemoHost @ …"}' > .inspector/config.json
+$ inspector state counter                     # no --app: the instance from config.json
+0
+$ echo 'VALUE=42' > .inspector/.env
+$ inspector send counter.set '${VALUE}'
+{"diff":[{"new":"${VALUE}","old":0,"path":"counter"}],"settled":true,"state":{"counter":"${VALUE}","device":{…}}}
+$ cat .inspector/run.json
+{
+  "lastStep" : {
+    "arguments" : [
+      "send",
+      "counter.set",
+      "${VALUE}"
+    ],
+    "at" : "2026-10-23T12:47:36.711Z",
+    "command" : "send"
+  }
+}
+```
+
+- **`config.json`** binds the calls to an app and, later, a simulator and an Xcode session: `app`, `instance`, `bundleId`, `udid`, `session`, `workspace`, `scheme`, `logSubsystem`, `writtenAt`. Only `inspector init` writes it; `instance` is the default for `--app`, and `--app` wins.
+- **`run.json`** holds what the last calls did: `lastStep` with the command, its arguments and when it started. Each command replaces only its own fields.
+- **`.env`** holds `NAME=value` lines. `send` fills each `${NAME}` in its payload from there and fails with `ENV_MISSING` before sending when a name has no value; `${NAME}` without a folder fails with `NO_CONFIG`, whose `detail` is where the folder was expected.
+- **Masking**: A value filled in from `.env` shows as `${NAME}` in the answer, in an error and in `run.json`, wherever it appears, also where the state holds it for another reason; a number equal to it becomes the string `"${NAME}"`. Nothing else is masked, whatever its key is called.
+- **Git**: Never commit the folder. List `.inspector/` in `.gitignore` when the integration stays in the repository, or in `.git/info/exclude` when it is added only for a debugging session.
+
+The rules per command are in [ADR 004](docs/adr/004-cli.md#the-inspector-folder).
 
 ## Debugging a running app with an agent
 

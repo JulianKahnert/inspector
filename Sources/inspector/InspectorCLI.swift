@@ -53,11 +53,23 @@ struct InspectorCLI: AsyncParsableCommand {
         return usage(error)
       }
     }
+    var environment = environment
+    let substitutions = Substitutions()
+    environment.substitutions = substitutions
+    let start = environment.now()
+    var folder: InspectorFolder?
+    let outcome: Outcome
     do throws(InspectorError) {
-      return .answer(try await command.answer(in: environment))
+      if type(of: command).isLoopStep { folder = try environment.folder() }
+      outcome = .answer(substitutions.mask(answer: try await command.answer(in: environment)))
     } catch {
-      return .failure(error)
+      outcome = .failure(substitutions.mask(error))
     }
+    // The step happened whether or not run.json can be written; failing now would hide its answer.
+    try? folder?.recordStep(
+      command: type(of: command).configuration.commandName ?? "", arguments: arguments.map(substitutions.mask),
+      at: start)
+    return outcome
   }
 
   /// ArgumentParser's message for a parse error or a help request: help goes to stdout with exit

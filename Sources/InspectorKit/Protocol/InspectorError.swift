@@ -19,6 +19,12 @@ public enum ErrorCode: String, Codable, Equatable, Sendable {
   /// A condition did not hold before its timeout; ``InspectorError/detail`` carries the last
   /// state checked, as one line of JSON.
   case expectationFailed = "EXPECTATION_FAILED"
+  /// The call needs the `.inspector/` folder and there is none; ``InspectorError/detail`` is the
+  /// path where it was expected.
+  case noConfig = "NO_CONFIG"
+  /// A payload names `${NAME}` and `.inspector/.env` has no value for it;
+  /// ``InspectorError/detail`` lists the missing names.
+  case envMissing = "ENV_MISSING"
 }
 
 /// A rejection sent back in place of a normal response.
