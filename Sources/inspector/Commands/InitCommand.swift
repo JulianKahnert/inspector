@@ -127,7 +127,7 @@ struct InitCommand: InspectorCommand {
     let udid = try await DeviceSession.start(session, workspace: workspace, device: previous?.udid, on: xcode)
     let config = InspectorConfig(
       app: options.app ?? executable, bundleId: bundleID, udid: udid, session: session, workspace: workspace,
-      scheme: scheme, logSubsystem: bundleID)
+      scheme: scheme, logSubsystem: bundleID.map(Self.logSubsystem(forBundleID:)))
     _ = try Self.write(config, to: folder, in: environment)
     if reset {
       guard let udid, let bundleID else {
@@ -222,6 +222,15 @@ struct InitCommand: InspectorCommand {
       $0.objectValue?["macroName"]?.stringValue == name
     }
     return entry?.objectValue?["evaluatedValue"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  /// The subsystem prefix `logs.sh` reads: `de.juliankahnert.` for `de.juliankahnert.RoommateAlbert`,
+  /// so the app's packages logging under their own subsystems are covered; a bundle ID with fewer
+  /// than three components stays whole.
+  static func logSubsystem(forBundleID bundleID: String) -> String {
+    let components = bundleID.split(separator: ".", omittingEmptySubsequences: false)
+    guard components.count >= 3 else { return bundleID }
+    return components.prefix(2).joined(separator: ".") + "."
   }
 
   /// `RoommateAlbert` for `RoommateAlbert @ iPhone 17`.
