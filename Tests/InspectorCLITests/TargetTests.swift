@@ -76,6 +76,56 @@ struct TargetTests {
       ])
   }
 
+  @Test("a target resolves by its identifier or its label", arguments: ["BackButton", "Stand eintragen"])
+  func resolves(query: String) throws {
+    let targets = Target.list(inHierarchy: try fixture("meter-detail-hierarchy"))
+
+    let target = try Target.resolve(query, in: targets)
+
+    #expect(target == targets.first { $0.identifier == query || $0.label == query })
+  }
+
+  @Test("a name that matches no target fails with TARGET_NOT_FOUND and every target in detail")
+  func notFound() throws {
+    let targets = [
+      Target(type: "Button", label: "Sichern", hitPoint: Point(x: 339.5, y: 100)),
+      Target(type: "TextField", placeholder: "0", value: "2100000", hitPoint: Point(x: 206.2, y: 193)),
+    ]
+
+    let error = #expect(throws: InspectorError.self) { try Target.resolve("Speichern", in: targets) }
+
+    #expect(
+      error
+        == InspectorError(
+          code: .targetNotFound, message: "no target has the identifier or label `Speichern`",
+          detail:
+            #"[{"hitPoint":[339.5,100],"label":"Sichern","type":"Button"},{"hitPoint":[206.2,193],"placeholder":"0","type":"TextField","value":"2100000"}]"#
+        ))
+  }
+
+  @Test("a name that matches targets at different points fails with TARGET_AMBIGUOUS and those targets in detail")
+  func ambiguous() throws {
+    let targets = Target.list(inHierarchy: try fixture("meter-detail-hierarchy"))
+
+    // The back button and the first tab are both labelled `Zähler`.
+    let error = #expect(throws: InspectorError.self) { try Target.resolve("Zähler", in: targets) }
+
+    #expect(
+      error
+        == InspectorError(
+          code: .targetAmbiguous, message: "2 targets have the identifier or label `Zähler`",
+          detail:
+            #"[{"hitPoint":[38,84],"identifier":"BackButton","label":"Zähler","type":"Button"},{"hitPoint":[75.3,822],"label":"Zähler","type":"Button"}]"#
+        ))
+  }
+
+  @Test("matches at one point are one target: the hierarchy lists some elements twice")
+  func samePoint() throws {
+    let bar = Target(type: "Slider", label: "Volume", value: "0 %", hitPoint: Point(x: 384, y: 453.5))
+
+    #expect(try Target.resolve("Volume", in: [bar, bar]) == bar)
+  }
+
   /// The text of the fixture `name`, a hierarchy captured from a running app.
   private func fixture(_ name: String) throws -> String {
     let url = try #require(Bundle.module.url(forResource: name, withExtension: "txt", subdirectory: "Fixtures"))
