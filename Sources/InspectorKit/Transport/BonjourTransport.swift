@@ -147,12 +147,25 @@ public struct BonjourTransport: InspectorTransport {
 
   /// How long the CLI waits for an answer once it has found the app.
   ///
-  /// Never shorter than the app may take: a send waits for its effects up to `timeoutMs`, or the
-  /// app's default settle timeout, before it answers.
+  /// Never shorter than the app may take, so the CLI never gives up before the app does: a send
+  /// waits for its effects up to `timeoutMs`, or the app's default settle timeout, then for its
+  /// `until` condition; a wait for its condition.
   static func responseTimeout(for request: Request) -> Duration {
     let margin: Duration = .seconds(5)
-    guard case .send(let send) = request else { return margin }
-    return (send.timeoutMs.map { .milliseconds($0) } ?? InspectorCore.defaultSettleTimeout) + margin
+    switch request {
+    case .send(let send):
+      let settle = send.timeoutMs.map { .milliseconds($0) } ?? InspectorCore.defaultSettleTimeout
+      guard send.until != nil else { return settle + margin }
+      return settle + conditionTimeout(send.untilTimeoutMs) + margin
+    case .wait(let wait):
+      return conditionTimeout(wait.timeoutMs) + margin
+    case .hello, .catalog, .state:
+      return margin
+    }
+  }
+
+  private static func conditionTimeout(_ milliseconds: Int?) -> Duration {
+    milliseconds.map { .milliseconds($0) } ?? InspectorCore.defaultConditionTimeout
   }
 
   /// The instance names of every app that advertises ``serviceType`` within `duration`, sorted.

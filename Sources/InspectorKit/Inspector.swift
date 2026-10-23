@@ -62,6 +62,7 @@ public final class Inspector: Inspectable, Sendable {
   // dictionary access and is never held across an `await`.
   private let storage = Mutex(Storage())
   private let isServing = Mutex(false)
+  private let registrationObservers = Mutex<[UUID: @Sendable () -> Void]>([:])
 
   /// Creates an empty inspector.
   ///
@@ -84,10 +85,12 @@ public final class Inspector: Inspectable, Sendable {
     storage.withLock { storage in
       storage.states[key] = StateEntry(id: id) { try JSONValue(encoding: try await read()) }
     }
+    registrationsChanged()
     return Registration(id: id) { [weak self] in
       self?.storage.withLock { storage in
         if storage.states[key]?.id == id { storage.states[key] = nil }
       }
+      self?.registrationsChanged()
     }
   }
 
@@ -158,11 +161,34 @@ public final class Inspector: Inspectable, Sendable {
     storage.withLock { storage in
       storage.actions[path] = ActionEntry(id: id, schema: schema, perform: perform)
     }
+    registrationsChanged()
     return Registration(id: id) { [weak self] in
       self?.storage.withLock { storage in
         if storage.actions[path]?.id == id { storage.actions[path] = nil }
       }
+      self?.registrationsChanged()
     }
+  }
+
+  // MARK: - Observing registrations
+
+  /// Calls `onChange` after every registration and every cancelled one, until the returned
+  /// token is cancelled.
+  ///
+  /// A condition waiting in the app checks the state again at once, because a screen that
+  /// registers its state is the change it most often waits for.
+  func observeRegistrations(_ onChange: @escaping @Sendable () -> Void) -> Registration {
+    let id = UUID()
+    registrationObservers.withLock { $0[id] = onChange }
+    return Registration(id: id) { [weak self] in
+      _ = self?.registrationObservers.withLock { $0.removeValue(forKey: id) }
+    }
+  }
+
+  // Calls the observers outside the lock, so an observer may register or cancel in turn.
+  private func registrationsChanged() {
+    let observers = registrationObservers.withLock { Array($0.values) }
+    observers.forEach { $0() }
   }
 
   // MARK: - Serving
