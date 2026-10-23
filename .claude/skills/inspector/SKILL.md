@@ -1,136 +1,150 @@
 ---
 name: inspector
 description: >-
-  Drives a running iOS or macOS debug build through the `inspector` CLI: navigate to a screen,
-  read its state, trigger actions, take a simulator screenshot. Use to check a change in the
-  running app, reproduce a bug on a deep screen, or on "inspector hello/catalog/state/send".
+  Drives a running iOS or macOS debug build through the `inspector` CLI: start it, navigate to a
+  screen, read its state, tap, swipe and type in the simulator. Use to check a change in the
+  running app, reproduce a bug on a deep screen, add or remove an app's debug integration, or on
+  "inspector init/state/send/tap".
 ---
 
-## Overview
+`inspector` reads the state of a debug build that registers state readers and actions and calls
+`serve()`, sends it actions, and performs gestures in the simulator through Xcode. Every call is
+one Bash command with one JSON document on stdout; a failure is one JSON line with `code` on
+stderr and exit 1, a usage error exits 64.
 
-`inspector` reaches into a running debug build that registers state readers and actions and calls
-`Inspector.shared.serve()` (README → *Integrating from an app or a feature package*). This skill
-gets an agent from "the app is running" to "I'm on the right screen, I can see it, and I know the
-state behind it". Tests and logs can't show that, and a screenshot alone can't get you there.
+Call the CLI as `scripts/inspector.sh <command…>` (paths here are relative to this skill's
+directory). It builds the CLI when the binary is missing or older than its sources, signs it so
+Xcode keeps its approval, and passes the arguments through.
 
-Every command goes through the scripts below. They build the CLI when needed and poll instead of
-sleeping; the CLI bounds each call itself.
+## Rules
 
-## State first, screenshots as the fallback
+- **State decides.** A step passes when its condition held in the state: `--until` or `wait`.
+  Screenshot, hierarchy and logs are *diagnosis*: they explain a failure and never pass a step.
+  An expectation only a screenshot could check is a missing registration: report the run as not
+  checkable and add the value to the screen's registration (*Integrating*).
+- **Every navigation and every gesture carries `--until '<match>'`** naming what the next screen
+  has. Its answer is `{"settled","state","diff"}`; read the `diff`.
+- **`tap --target <identifier|label>` first.** Coordinates are for swipes and for controls with
+  neither identifier nor label, taken from `capture`'s `targets`.
+- **Pause about 1 s after a navigation that animates** (push, sheet, alert) before a gesture on
+  the new screen. The state reports the screen before it has slid in, and a gesture during the
+  animation is lost.
+- **Give an alert about 1 s** after it opens before confirming it, and 1 s after confirming before
+  the next step; an app can crash when its alert is confirmed while it still presents.
+- **End the route at the first failed step.** A route that goes on types into whatever is still
+  open and can save into real data. Diagnose, fix, then start again from the state. Steps chained
+  in one Bash call go with `&&`.
+- **Ask before an action or tap that writes real data** (sends a message, deletes an entry);
+  navigating needs no question.
 
-Read the state to find out where the app is and what it shows. A state answer is a few hundred
-bytes of JSON. A screenshot is a full-resolution image: slower to take, far more tokens to read,
-and a picture you still have to interpret. So:
+## The loop
 
-- **Check every step with `state` or `wait-state.sh`**, including where you are when you start.
-  Which keys exist tells you which screens are alive; a sheet left open by an earlier session
-  shows up as its key.
-- **Take a screenshot only when the state can't answer**: a step fails and the state doesn't say
-  why, state and behaviour disagree, or the question is visual (layout, colour, clipping).
-- **When a screenshot shows something the task needed and the state lacks it**, add that value to
-  the screen's registration right away, rebuild, and read it from the state from then on. Treat
-  every screenshot you needed as a gap in the registrations, so the next run doesn't need it.
-
-## Workflow
-
-1. **Start the app and find out where it is.** In an iOS app's repository run
-   `scripts/inspector.sh init`: it builds, installs and starts the app through Xcode, writes
-   `.inspector/config.json` and answers with `hello` and the whole `state`. After a code change
-   always run it cold; when nothing changed and the app still serves, `init --warm` only reads it.
-   Errors and the path without Xcode: `references/cli.md` → *Init*. For an app you didn't start
-   (a Mac app, a physical device), run `scripts/inspector.sh hello`, then
-   `scripts/inspector.sh state`. Either way the app may still show a sheet or a deep screen from
-   an earlier session, and the route has to start from there. The first call builds the CLI (a
-   few seconds); later calls take about 550 ms, or 20–100 ms with `--app` set to the full
-   `instance` name from `hello`, which `init` stores as the default. `APP_NOT_FOUND` without
-   `init` means no debug build is serving: ask the user to start the app instead of retrying.
-   `TIMEOUT` means the app stopped answering, for example at a breakpoint. `AMBIGUOUS_APP` means
-   several apps serve: pick one with `--app` (see `references/cli.md` → *Several apps*).
-2. **See what's on offer.** `scripts/inspector.sh catalog` lists the actions and their payload
-   schemas, and `scripts/inspector.sh state` shows the current state. Both only cover screens whose
-   model exists now, so they grow as you navigate.
-3. **Plan the route.** Map the goal ("members of a channel's details", "the settings sheet") to a
-   chain of actions, and read the value each step needs from the state of the step before. An
-   `int` payload can be a row index or a domain id; the action's name and that state show which.
-   The inspector has no generic back: to leave a screen, use its close action if it has one, or
-   an action higher up the route that rebuilds everything below it (opening another list entry,
-   switching tabs).
-   When an action you need isn't in the catalog, open the screen that owns it first. If no screen
-   registers it at all, the app needs a new registration: follow *Integrating* below, with the
-   user's go-ahead, instead of tapping around it.
-4. **Navigate step by step.** After each `scripts/inspector.sh send <path> [json]` that pushes a
-   screen or presents a sheet, run `scripts/wait-state.sh '<jq filter for the next screen>'`
-   before the next step. That usually takes 100–200 ms and sometimes a second. Don't read an
-   empty `diff` as failure: the new screen registers after the action has returned. A top-level
-   key that contains a dot can't be read with `state <key>`; filter the whole state with
-   `wait-state.sh` or `jq` instead, and quote it: `'."settings.detail".rows'`.
-5. **Answer from the state.** Read the values the task asks about from the target screen's
-   state. Each `send` answer's `diff` shows what that action changed; see `references/cli.md`
-   for the error codes.
-6. **Fall back to a screenshot only if the state can't answer** (see *State first* above): run
-   `scripts/screenshot.sh [file.png]` and read the PNG it prints. If it showed something the
-   state should have carried, extend the registration before you report.
-7. **Report** the route you took (the actions in order), the state values that answer the task,
-   whether a screenshot was needed and which registration you added so it won't be next time,
-   and anything you couldn't reach.
-
-**Example route** (the paths are whatever the app registered; `catalog` names them):
+1. **Start the app.** In the app's repository run `scripts/inspector.sh init`. It builds,
+   installs and starts the app through Xcode in a new session, writes `.inspector/config.json`
+   (which binds every later call to this app and simulator) and answers
+   `{"config","hello","state"}`. Run it cold after every code change; with no change since the
+   last run and the app still serving, `init --warm` only reads it. An app you cannot start
+   (a Mac app, a physical device) needs no `init` for state and actions: `hello`, then `state`.
+   Gestures exist only in the simulator, after `init`. Done when `init` answered with a state.
+2. **Find where the app is.** The keys in that state are the screens alive now; a sheet left open
+   by an earlier run shows up as its key. The route starts there. `catalog` lists the actions with
+   their payload schema; state and catalog both grow as screens open.
+3. **Plan the route**: a chain of steps from where the app is to the goal, each with the match
+   that proves it arrived. Take each step's value from the state of the step before; an `int`
+   payload is a row index or a domain id, as the action's name says. To leave a screen use its
+   close action, an action higher up that rebuilds everything below it, or, for a sheet without a
+   close action, `tap --target` on its close or cancel button. An action missing from the catalog
+   lives on a screen not open yet; missing everywhere, the app needs a registration
+   (*Integrating*, with the user's go-ahead).
+4. **Navigate with actions**: `send <path> [json] --until '<match>'`, for example
+   `send settings.open 2 --until '{"settings.detail":{"isLoading":false}}'`. An empty `{}` as a
+   value asks only for the key.
+5. **Gesture where the UI itself is under test**, or where no action reaches:
+   `tap --target <name> --until …`, `swipe <x1> <y1> <x2> <y2> [s] --until …`,
+   `type <text> --until …`. `type` writes at the cursor of the focused field: tap the field near
+   its right end first so the cursor sits after its text, and clear text with `\u{0008}`
+   (backspace) per character. `${NAME}` in a payload or typed text comes from `.inspector/.env`
+   and prints masked.
+6. **Answer from the state.** Read the values the task asks about from the last `diff` or
+   `state`. A key containing a dot is read from the whole document: `state | jq '."a.b"'`. The run
+   passes when every condition of the route held, the last one included.
+7. **Diagnose only after a failure** (`EXPECTATION_FAILED`, a `hello` that finds no app, an
+   `init` that fails), in this order: the last state in the error's `detail`
+   (`jq -r .detail | jq`); `capture`'s `targets`; `scripts/logs.sh`, the app's errors since that
+   step; the screenshot PNG at `capture`'s `screenshot` path, only when targets, state and logs
+   leave the question open. The raw hierarchy file stays unread.
+8. **Report** the route as the calls in order, the state values that answer the task, which
+   conditions held, whether a screenshot was needed and which registration you added so the next
+   run needs none, and what you could not reach.
 
 ```sh
-scripts/inspector.sh send tabs.select settings
-scripts/wait-state.sh '."settings.list" | length > 0'
-scripts/inspector.sh send settings.open 2
-scripts/wait-state.sh '."settings.detail".isLoading == false'
-scripts/inspector.sh state | jq '."settings.detail"'
+s=scripts/inspector.sh   # paths are whatever the app registered; `catalog` names them
+$s send tabs.select settings --until '{"settings.list":{}}' &&
+  $s send settings.open 2 --until '{"settings.detail":{"isLoading":false}}' &&
+  sleep 1 &&
+  $s tap --target Edit --until '{"settings.detail":{"isEditing":true}}'
 ```
 
-Actions change real app data when the app wires them to real use cases, such as sending a message
-or deleting an entry. Before sending one like that, check whether it only navigates. If it writes
-data, ask first.
+For a condition a match cannot express (`>`, a regex), poll with
+`scripts/wait-state.sh '<jq filter>' [seconds]`.
 
-## Integrating into an app or package
+## Session
 
-When the app has no inspector yet, a route is missing a step, or a screen's state leaves out
-something it shows, add to the debug integration. Register the state of each screen so it mirrors
-what the screen shows (see `references/integration.md` → *What a screen's state should carry*);
-every value missing there turns into a screenshot later.
+`init`'s Xcode session expires about two minutes after its last call; every gesture and capture
+pushes that back. Nobody needs to end it: let it expire. An app that session started ends with it,
+and the next gesture answers `NO_SESSION`, so `init` again. An app started outside a session (an
+installed build after `xcrun simctl launch`) survives, and the CLI starts a new session for it by
+itself. `scripts/inspector.sh end` ends the session and its app at once.
 
-The integration is one file, `DebugInspector.swift`, that registers everything from the app's root
-object and is the only caller of `serve()`, plus three marked touch points: the dependency, one
-call in the app's entry point, and the two `Info.plist` keys. In a repository that never commits
-it, run `scripts/integrate.sh <repo> --from ~/.claude/inspector/integrations/<repo>` (or
-`--into <target path>` for the template), add the one marked call line, and before a pull request
-run `scripts/remove.sh <repo…>` and `scripts/remove.sh --check <repo…>`. Both run without asking.
-Where the store lives and how both scripts work: `references/integration.md` → *Ephemeral
-integration*.
+## Errors
 
-## References
+Every `code` the CLI and the scripts emit has exactly one next step in `references/errors.md`.
+Look the code up and take that step. A step marked **human** ends your run: report the code and
+the step, without retrying.
 
-| Topic | File | When |
-|---|---|---|
-| Every command, the `send` answer, payload schemas, error codes, several apps, screenshots | `references/cli.md` | When a call is rejected, or before using a command for the first time |
-| Adding and removing a debug integration: manifests, registrations, serve, plist, pitfalls | `references/integration.md` | Before touching an app's or package's code |
+## Integrating
+
+The integration is one file, `DebugInspector.swift`, that registers every screen from the app's
+root object and is the only caller of `serve()`, plus three marked touch points
+(`// DEBUG INSPECTOR`): the dependency, one call in the app's entry point, the two `Info.plist`
+keys. A repository keeps it in one of two modes:
+
+- **Permanent**: committed behind `#if DEBUG`, left out of release builds with
+  `EXCLUDED_SOURCE_FILE_NAMES`, `.inspector/` in `.gitignore`; the app's own docs name its release
+  check (no InspectorKit symbol, no `NSBonjourServices`).
+- **Ephemeral**: never committed. The file and an `.env` live in the store,
+  `~/.claude/inspector/integrations/<repo>/<target path>/`. Run
+  `scripts/integrate.sh <repo> --from ~/.claude/inspector/integrations/<repo>` (`--into <target
+  path>` starts from the template), add the one marked call line, and before every pull request
+  run `scripts/remove.sh <repo…>` and `scripts/remove.sh --check <repo…>`. Both scripts run
+  without asking. A registration a loop needed goes into the store's copy too, so the next
+  workspace starts with it.
+
+A screen's state mirrors what the screen shows, in the screen's unit: a value the app stores
+scaled (a meter reading in thousandths) is registered as displayed, or its key names the unit.
+Every sheet and pushed screen gets a close action. Details, rules and the template:
+`references/integration.md`.
 
 ## Scripts
 
-- `scripts/inspector.sh [--app name] <command…>` — the CLI with a build-if-missing step
-  (`INSPECTOR_REBUILD=1` forces a build) and a signing step that keeps Xcode's approval. `apps`
-  lists every serving app.
-- `scripts/wait-state.sh '<jq filter>' [seconds]` — polls `state` until the filter yields something
-  other than `null` or `false`; prints the value, and the elapsed time on stderr.
-- `scripts/screenshot.sh [file.png] [UDID]` — PNG of the booted iOS simulator; prints its path.
-- `scripts/logs.sh [--all] [--since <seconds>]` — after a failed step only: the app's error and
-  fault log entries since that step, from the simulator in `.inspector/config.json`
-  (`references/cli.md` → *Logs*).
-- `scripts/add-to-package.sh <package dir> <target> [--ios-only] [--copy-template]` — adds
-  InspectorKit via `swift package add-dependency` / `add-target-dependency`, marked, and rolls
-  the manifest back on failure.
-- `scripts/integrate.sh <repo> --from <store dir> | --into <target path>` — sets up an integration
-  that is never committed, from the store or the template.
-- `scripts/remove.sh [<repo…>]` — takes it out again; `--check [--base <ref>]` exits 1 while
+- `scripts/inspector.sh [--app name] <command…>`: the CLI, rebuilt when stale and signed
+  (`INSPECTOR_REBUILD=1` forces a build).
+- `scripts/wait-state.sh '<jq filter>' [seconds]`: polls `state` until the filter yields neither
+  `null` nor `false`.
+- `scripts/logs.sh [--all] [--since <seconds>]`: after a failed step, the app's error and fault
+  log entries since that step.
+- `scripts/integrate.sh <repo> --from <store dir> | --into <target path>`: adds an ephemeral
+  integration.
+- `scripts/remove.sh [<repo…>]`: takes it out again; `--check [--base <ref>]` exits 1 while
   anything of it is left.
+- `scripts/add-to-package.sh <package dir> <target> [--ios-only] [--copy-template]`: adds
+  InspectorKit to one package target, marked.
 
-## Assets
+## References
 
-- `assets/DebugInspector.swift` — the integration file: `start(root:)`, a list screen and a detail
-  screen registered from the root, and `serve()`.
+| File | Read it |
+|---|---|
+| `references/cli.md` | Before a command you have not used yet: every command, its answer, `init`, conditions, `.inspector/`, several apps, logs |
+| `references/errors.md` | On any error `code` |
+| `references/integration.md` | Before touching an app's or a package's code |
+| `assets/DebugInspector.swift` | The integration file's template |

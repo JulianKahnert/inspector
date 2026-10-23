@@ -3,7 +3,8 @@
 # Output follows the CLI: one JSON document on stdout, a failure as one JSON line with `code` on
 # stderr and exit 1, a usage error as message plus usage on stderr and exit 64.
 
-skill_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# -P: reached through a symlink such as `~/.claude/skills/inspector`, `..` has to climb the checkout.
+skill_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 inspector_root="$(cd "$skill_dir/../../.." && pwd)"
 # shellcheck disable=SC2034 # used by the scripts that source this file
 marker='DEBUG INSPECTOR'
