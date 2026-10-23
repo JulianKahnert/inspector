@@ -181,6 +181,24 @@ struct InitCommandTests {
     }
   }
 
+  @Test("init creates the folder INSPECTOR_DIR names, and adds no exclude for a folder outside the repository root")
+  func createsInspectorDirectory() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.makeDirectory("app/Demo.xcodeproj")
+      let processes = Self.processes()
+      var environment = processes.environment(Self.xcode().environment(serving: try await demoApp()))
+      environment.inspectorDirectory = sandbox.url("elsewhere/.inspector").path
+
+      let outcome = await InspectorCLI.outcome(of: ["init"], in: sandbox.environment(environment, in: "app"))
+
+      #expect(outcome.exitCode == 0)
+      #expect(try sandbox.json("elsewhere/.inspector/config.json")["session"] == "inspector-app-20261019-085320")
+      #expect(try sandbox.json("elsewhere/.inspector/run.json")["lastStep"]?["command"] == "init")
+      #expect(!processes.commands.contains { $0.first == "/usr/bin/git" })
+    }
+  }
+
   @Test("init without --reset never uninstalls")
   func noReset() async throws {
     try await Sandbox.run { sandbox in
