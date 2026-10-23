@@ -89,6 +89,7 @@ flowchart LR
 
 ```
 inspector [--app name] apps | hello | catalog | state [path] | send <path> [json]
+inspector end
 ```
 
 Against `demo-host`:
@@ -159,6 +160,17 @@ $ cat .inspector/run.json
 - **Git**: Never commit the folder. List `.inspector/` in `.gitignore` when the integration stays in the repository, or in `.git/info/exclude` when it is added only for a debugging session.
 
 The rules per command are in [ADR 004](docs/adr/004-cli.md#the-inspector-folder).
+
+### Commands through Xcode
+
+`inspector end` ends the Xcode device interaction session `config.json` names, and the app that session started with it. Such commands call Xcode's tools through `xcrun mcpbridge`, one short-lived bridge per call, and Xcode serves them only once a human approved the binary in Xcode's dialog. Xcode recognizes the binary by its signature, so run it through the skill's `scripts/inspector.sh`, which signs every build with your "Apple Development" identity and the identifier `de.juliankahnert.inspector`; a plain `swift build` leaves a signature Xcode refuses.
+
+```console
+$ scripts/inspector.sh end
+{"session":"inspector-RoommateAlbert-20260101-130420","xcode":{"userMessage":"Session stopped"}}
+```
+
+A refused binary ends in `NOT_APPROVED`, an ended session whose app is gone in `NO_SESSION`; [ADR 004](docs/adr/004-cli.md#commands-through-xcode) has every code and the session restart.
 
 ## Debugging a running app with an agent
 

@@ -37,6 +37,10 @@ swift run inspector state [path]
 swift run inspector send counter.set 42
 ```
 
+Commands through Xcode (`end`) need the signed binary: run them through
+`.claude/skills/inspector/scripts/inspector.sh`, which signs after every build; `swift run` and a
+bare `swift build` leave a signature Xcode refuses with `NOT_APPROVED`.
+
 Without a serving app the CLI fails with `APP_NOT_FOUND` after 5 seconds, an app that stops
 answering ends in `TIMEOUT`, and with several apps serving it needs `--app`, unless an
 `.inspector/config.json` names the instance ([The `.inspector/` folder](README.md#the-inspector-folder)).
