@@ -58,9 +58,12 @@ final class Substitutions: Sendable {
 
   /// An answer with every filled-in value masked; unchanged when nothing was filled in.
   func mask(answer: any Encodable) -> any Encodable {
-    guard !values.withLock(\.isEmpty),
-      let json = try? JSONDecoder().decode(JSONValue.self, from: Data(WireJSON.line(answer).utf8))
-    else { return answer }
+    guard !values.withLock(\.isEmpty) else { return answer }
+    let line = WireJSON.line(answer)
+    guard let json = try? JSONDecoder().decode(JSONValue.self, from: Data(line.utf8)) else {
+      // `WireJSON` writes valid JSON, so this does not happen; if it did, a masked string beats a leak.
+      return JSONValue.string(mask(line))
+    }
     return mask(json)
   }
 
