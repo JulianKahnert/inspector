@@ -20,7 +20,9 @@ public struct BonjourTransport: InspectorTransport {
   ///
   /// When serving, `nil` advertises under the device's name; ``Inspector/serve(app:)`` passes
   /// `<app> @ <device>`. When sending, the name selects the app by its full instance name or by
-  /// the part before ` @ `, and `nil` works only while exactly one app serves.
+  /// the part before ` @ `, and `nil` works only while exactly one app serves. A full instance
+  /// name connects as soon as Bonjour reports it; the part before ` @ ` and `nil` wait about half
+  /// a second longer for a second match.
   public var name: String?
 
   /// Creates a transport that advertises or looks for the given instance name.
@@ -68,10 +70,7 @@ public struct BonjourTransport: InspectorTransport {
     }
   }
 
-  /// The one endpoint `app` selects, once no second match has turned up for a short while.
-  ///
-  /// Bonjour reports services one by one as it finds them, so the first update with a match may
-  /// not hold a second app that matches too; returning then would skip ``ErrorCode/ambiguousApp``.
+  /// The one endpoint `app` selects among the services Bonjour finds.
   private static func browse(for app: String?, orThrow notFound: InspectorError) async throws -> Bonjour.Endpoint {
     let (updates, continuation) = AsyncStream.makeStream(
       of: [Bonjour.Endpoint].self, bufferingPolicy: .bufferingNewest(1))
@@ -84,21 +83,44 @@ public struct BonjourTransport: InspectorTransport {
           }
       }
       defer { group.cancelAll() }
-      var latest: [Bonjour.Endpoint] = []
-      for await endpoints in updates {
-        latest = endpoints
-        if try select(app, from: endpoints.map(\.name)) != nil { break }
+      let match = try await discover(app, in: updates, name: \.name) {
+        // A guess at how long a second app on the same network takes to show up; not measured.
+        try await Task.sleep(for: .milliseconds(500))
+        continuation.finish()
       }
-      try Task.checkCancellation()
-      // A guess at how long a second app on the same network takes to show up; not measured.
-      try await Task.sleep(for: .milliseconds(500))
-      continuation.finish()
-      for await endpoints in updates { latest = endpoints }
-      guard let selected = try select(app, from: latest.map(\.name)),
-        let match = latest.first(where: { $0.name == selected })
-      else { throw notFound }
+      guard let match else { throw notFound }
       return match
     }
+  }
+
+  /// The one endpoint `app` selects from a browser's `updates`, or `nil` when none does.
+  ///
+  /// Bonjour reports services one by one as it finds them, so the first update with a match may
+  /// not hold a second app that matches too; returning then would skip ``ErrorCode/ambiguousApp``.
+  /// So once a match turns up, `graceWindow` lets later updates arrive and then finishes
+  /// `updates`, and the last update decides.
+  ///
+  /// A full instance name skips that wait: Bonjour keeps instance names unique per service type
+  /// and domain, so the first endpoint with exactly that name is the only one it can select.
+  ///
+  /// - Throws: ``ErrorCode/ambiguousApp`` when several endpoints match.
+  static func discover<Endpoint>(
+    _ app: String?,
+    in updates: AsyncStream<[Endpoint]>,
+    name: (Endpoint) -> String,
+    graceWindow: () async throws -> Void
+  ) async throws -> Endpoint? {
+    var latest: [Endpoint] = []
+    for await endpoints in updates {
+      if let app, let exact = endpoints.first(where: { name($0) == app }) { return exact }
+      latest = endpoints
+      if try select(app, from: endpoints.map(name)) != nil { break }
+    }
+    try Task.checkCancellation()
+    try await graceWindow()
+    for await endpoints in updates { latest = endpoints }
+    guard let selected = try select(app, from: latest.map(name)) else { return nil }
+    return latest.first { name($0) == selected }
   }
 
   /// The instance name ``Inspector/serve(app:)`` advertises: `<app> @ <device>`.
@@ -150,11 +172,15 @@ public struct BonjourTransport: InspectorTransport {
 
   /// Picks the one instance name `app` selects, or `nil` while none does.
   ///
+  /// A name equal to `app` wins over names that only start with `<app> @ `, since Bonjour
+  /// instance names are unique.
+  ///
   /// - Throws: ``ErrorCode/ambiguousApp`` when several names match.
   static func select(_ app: String?, from names: [String]) throws -> String? {
+    if let app, names.contains(app) { return app }
     let matches = names.filter { name in
       guard let app else { return true }
-      return name == app || name.hasPrefix("\(app) @ ")
+      return name.hasPrefix("\(app) @ ")
     }
     guard matches.count <= 1 else {
       throw InspectorError(
