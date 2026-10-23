@@ -12,6 +12,11 @@ for that repo and holds every code example, so this file links there instead of 
 | `inspector` | executable | The CLI; talks to the app over `BonjourTransport` |
 | `demo-host` | executable | A fake app on the Mac for manual checks |
 | `InspectorKitTests` | tests | Swift Testing; in-process only, no sockets |
+| `InspectorCLITests` | tests | Every command's stdout, stderr and exit code, against an in-process app |
+
+A CLI command is one file in `Sources/inspector/Commands/` that conforms to `InspectorCommand`,
+plus one entry in `InspectorCLI`'s `subcommands`; its tests run it through
+`InspectorCLI.outcome(of:in:)` against an in-process app.
 
 The module is `InspectorKit`, not `Inspector`: a module and a type with the same name break
 qualified lookup.
