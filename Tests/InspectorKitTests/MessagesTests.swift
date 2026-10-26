@@ -11,11 +11,21 @@ struct MessagesTests {
       .hello, .catalog,
       .state(path: nil), .state(path: "counter"),
       .send(SendRequest(path: "counter.set", payload: 42, timeoutMs: 500)),
+      .send(SendRequest(path: "counter.set", payload: 42, until: .object(["counter": 42]), untilTimeoutMs: 1_000)),
+      .wait(WaitRequest(until: .object(["counter": 42]))),
+      .wait(WaitRequest(until: .object(["counter": 42]), timeoutMs: 1_000, baseline: .object(["counter": 0]))),
     ]
     for request in requests {
       let data = Data(WireJSON.line(request).utf8)
       #expect(try JSONDecoder().decode(Request.self, from: data) == request)
     }
+  }
+
+  @Test("A wait request is one flat line, the match under until")
+  func waitRequestLine() {
+    #expect(
+      WireJSON.line(Request.wait(WaitRequest(until: .object(["counter": 42]), timeoutMs: 1_000)))
+        == #"{"t":"wait","timeoutMs":1000,"until":{"counter":42}}"#)
   }
 
   @Test("A send request with no payload omits the key; one sending null keeps it")
@@ -60,6 +70,14 @@ struct MessagesTests {
   func helloIsFlat() {
     let line = WireJSON.line(Response.hello(Hello(app: "DemoHost", pid: 1, provider: "Inspector")))
     #expect(line == #"{"app":"DemoHost","pid":1,"provider":"Inspector","t":"hello"}"#)
+  }
+
+  @Test("hello carries the instance name once a transport has set it")
+  func helloWithInstance() throws {
+    let hello = Hello(app: "DemoHost", instance: "DemoHost @ Mac", pid: 1, provider: "Inspector")
+    let line = WireJSON.line(Response.hello(hello))
+    #expect(line == #"{"app":"DemoHost","instance":"DemoHost @ Mac","pid":1,"provider":"Inspector","t":"hello"}"#)
+    #expect(try JSONDecoder().decode(Response.self, from: Data(line.utf8)) == .hello(hello))
   }
 
   @Test("An error carries the code and suggestions, and omits absent detail and empty suggestions")

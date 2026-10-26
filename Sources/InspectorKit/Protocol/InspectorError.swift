@@ -16,6 +16,35 @@ public enum ErrorCode: String, Codable, Equatable, Sendable {
   case ambiguousApp = "AMBIGUOUS_APP"
   /// The app was found but did not answer in time.
   case timeout = "TIMEOUT"
+  /// A condition did not hold before its timeout; ``InspectorError/detail`` carries the last
+  /// state checked, as one line of JSON.
+  case expectationFailed = "EXPECTATION_FAILED"
+  /// The call needs the `.inspector/` folder and there is none; ``InspectorError/detail`` is the
+  /// path where it was expected.
+  case noConfig = "NO_CONFIG"
+  /// A payload names `${NAME}` and `.inspector/.env` has no value for it;
+  /// ``InspectorError/detail`` lists the missing names.
+  case envMissing = "ENV_MISSING"
+  /// The Xcode device interaction session in `.inspector/config.json` has ended, and the app it
+  /// started with it.
+  case noSession = "NO_SESSION"
+  /// Xcode has not approved this `inspector` binary for its tools; a human confirms Xcode's
+  /// dialog, calling again changes nothing.
+  case notApproved = "NOT_APPROVED"
+  /// The selected Xcode has no `mcpbridge`.
+  case xcodeTooOld = "XCODE_TOO_OLD"
+  /// One of Xcode's tools failed; the message quotes Xcode's text, ``InspectorError/detail`` is
+  /// that text alone.
+  case xcodeError = "XCODE_ERROR"
+  /// A capture came back without the screen's hierarchy; ``InspectorError/detail`` is Xcode's
+  /// answer.
+  case noHierarchy = "NO_HIERARCHY"
+  /// No target on the screen has the identifier or label asked for; ``InspectorError/detail``
+  /// lists every target, as one line of JSON.
+  case targetNotFound = "TARGET_NOT_FOUND"
+  /// Targets at more than one point have the identifier or label asked for;
+  /// ``InspectorError/detail`` lists them, as one line of JSON.
+  case targetAmbiguous = "TARGET_AMBIGUOUS"
 }
 
 /// A rejection sent back in place of a normal response.

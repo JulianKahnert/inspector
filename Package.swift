@@ -8,11 +8,22 @@ let package = Package(
         .library(name: "InspectorKit", targets: ["InspectorKit"]),
         .executable(name: "inspector", targets: ["inspector"]),
     ],
+    dependencies: [
+        // The CLI's only dependency; InspectorKit stays dependency-free.
+        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
+    ],
     targets: [
         .target(name: "InspectorKit", swiftSettings: .standard),
-        .executableTarget(name: "inspector", dependencies: ["InspectorKit"], swiftSettings: .standard),
+        .executableTarget(
+            name: "inspector",
+            dependencies: ["InspectorKit", .product(name: "ArgumentParser", package: "swift-argument-parser")],
+            swiftSettings: .standard),
         .executableTarget(name: "demo-host", dependencies: ["InspectorKit"], swiftSettings: .standard),
         .testTarget(name: "InspectorKitTests", dependencies: ["InspectorKit"], swiftSettings: .standard),
+        .testTarget(
+            name: "InspectorCLITests", dependencies: ["inspector", "InspectorKit"],
+            // Hierarchies Xcode's device interaction tools captured from a running app.
+            resources: [.copy("Fixtures")], swiftSettings: .standard),
     ]
 )
 
