@@ -54,6 +54,7 @@ changes nothing.
 | `NO_SIGNING_IDENTITY` | From `inspector.sh`: no "Apple Development" identity to sign with | Human | Add one in Xcode > Settings > Accounts |
 | `XCODE_TOO_OLD` | The selected Xcode has no `mcpbridge` | Human | Select Xcode 27.2 or newer (`xcode-select`) |
 | `BAD_REQUEST` | From `init`: the repository has no workspace or project, or several | Agent | `init --workspace <path>` |
+| `DEVICE_AMBIGUOUS` | From `init`: several simulators are booted and neither `--udid` nor `config.json` names one; `detail` lists them | Agent, else human | The user or the task named the simulator: `init --udid <its udid from detail>`, which pins it in `config.json`. Otherwise ask the user which one; never pick one yourself, another session may be using it |
 | `XCODE_ERROR` | `init`'s build failed; `message` quotes the build output | Agent | Fix the code, cold `init` |
 | `XCODE_ERROR` | The device is in a session that `config.json` names (your earlier run) | Agent | `scripts/inspector.sh end`, then cold `init` |
 | `XCODE_ERROR` | The device is in a session `config.json` does not name (another agent, another workspace) | Human | End that session or free the simulator |
@@ -81,5 +82,7 @@ stderr, exits 1 on failure with the manifest restored, and 2 on a usage error.
 | `PLIST_INVALID` | Agent | `plutil -convert xml1 <plist>`, then `integrate.sh` again |
 | `INTEGRATION_LEFT` | Agent | `scripts/remove.sh`; a `diff` or `tracked` finding in a commit: change that commit |
 | `INTEGRATION_LEFT` with a `resolved` finding: a build or `swift run` added InspectorKit's pins to a `Package.resolved` | Agent | `scripts/remove.sh`, which puts the file back as it was; never commit the pins |
+| `UNEXPECTED_CHANGE` from `remove.sh`: it changed a file outside the integration; `detail.unexpected` lists them | Agent | `git checkout -- <path>` for each, then `remove.sh --check`; report it, it is a bug in `remove.sh` |
+| `UNEXPECTED_CHANGE` from `--check`: a `deleted` finding (a tracked file deleted, not staged) or an `unexpected` one (a file `remove.sh` changed that still differs) | Agent | `git checkout -- <path>`; a deletion you meant: `git rm <path>` |
 | `BASE_NOT_FOUND` | Agent | `--base <branch>` |
 | `NOT_A_REPO`, `NOT_AN_APP_REPO` | Agent | Pass an app's checkout, not a plain folder or the inspector repository |

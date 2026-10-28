@@ -43,6 +43,10 @@ Run `scripts/inspector.sh init` from the app's repository. It ends once `state` 
 - **Cold** (the default; after every code change): starts Xcode with `xed -b` when it is not running, opens the repository's workspace, ends the session the old `config.json` names, starts a new one, builds, installs and starts the app with the active scheme, then reads `hello` and `state`. It takes the build time plus a few seconds; with the build up to date about 11 s.
 - **Warm** (`--warm`; you decide that no code changed since the last run): only `hello` and `state` of the app that serves, well under a second, no build, the session untouched. It finds only an app that runs outside a session, for example after `xcrun simctl launch <udid> <bundleId>` of the installed build, because the app of an expired session is gone.
 - **`--reset`** uninstalls the app before the install, which deletes its data. Use it only when the task needs a fresh app; init never logs in.
+- **The simulator**: `--udid <udid>`, else the `udid` in `config.json`, else Xcode's choice while
+  at most one simulator is booted. With several booted and none named, `init` stops before Xcode
+  with `DEVICE_AMBIGUOUS`; `detail` lists each booted one's `name`, `runtime` and `udid`. Pass
+  `--udid` with the one the user named; the next `init` keeps it from `config.json`.
 - **`--app <name>`** picks the app when several serve, and the scheme to build when the workspace has a scheme of that name. **`--workspace <path>`** picks the workspace when the repository has several.
 - `config.json` gets every field, `instance` being the full name `hello` reported and `logSubsystem` the bundle ID's vendor prefix (`de.juliankahnert.`), so `logs.sh` covers the app's packages too; `.inspector/` goes into `.git/info/exclude` when nothing ignores it yet.
 - The first `init` on a machine opens Xcode's approval dialog for the CLI; until a human confirms it, `init` ends in `NOT_APPROVED`.
