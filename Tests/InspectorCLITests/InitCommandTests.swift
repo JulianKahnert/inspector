@@ -42,10 +42,11 @@ struct InitCommandTests {
 
   /// Xcode runs; `git` sees `.inspector/` as not ignored and keeps its excludes in
   /// `.git/info/exclude`.
-  static func processes() -> FakeProcesses {
+  static func processes(booted: String = #"{"devices":{}}"#) -> FakeProcesses {
     FakeProcesses { command in
       switch command.dropFirst().last {
       case "Xcode": return ProcessOutput(status: 0, stdout: "8160\n")
+      case "--json": return ProcessOutput(status: 0, stdout: booted)
       case ".inspector/": return ProcessOutput(status: 1)
       case "info/exclude": return ProcessOutput(status: 0, stdout: ".git/info/exclude\n")
       default: return ProcessOutput(status: 0)
@@ -90,6 +91,104 @@ struct InitCommandTests {
       #expect(try sandbox.json("app/.inspector/config.json") == (try JSONDecoder().decode(JSONValue.self, from: Data(config.utf8))))
       // Marked like integrate.sh's entry, so remove.sh takes it out again.
       #expect(sandbox.read("app/.git/info/exclude") == "# DEBUG INSPECTOR\n/.inspector/\n")
+    }
+  }
+
+  /// `simctl list devices booted --json` with an iPad and two iPhone 17 on different runtimes.
+  static let threeBooted = #"""
+    {"devices":{
+      "com.apple.CoreSimulator.SimRuntime.iOS-27-2":[
+        {"name":"iPhone 17","state":"Booted","udid":"UDID-272"},
+        {"name":"iPad Pro 13-inch (M5)","state":"Booted","udid":"UDID-IPAD"}],
+      "com.apple.CoreSimulator.SimRuntime.iOS-27-0":[{"name":"iPhone 17","state":"Booted","udid":"UDID-270"}],
+      "com.apple.CoreSimulator.SimRuntime.watchOS-27-0":[]}}
+    """#
+
+  @Test("init with several simulators booted and none named stops before Xcode, lists them and writes nothing")
+  func severalBooted() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.makeDirectory("app/Demo.xcodeproj")
+      let xcode = Self.xcode()
+      let processes = Self.processes(booted: Self.threeBooted)
+      let environment = processes.environment(xcode.environment(serving: try await demoApp()))
+
+      let outcome = await InspectorCLI.outcome(of: ["init"], in: sandbox.environment(environment, in: "app"))
+
+      let detail =
+        #"[{"name":"iPhone 17","runtime":"iOS 27.0","udid":"UDID-270"},{"name":"iPad Pro 13-inch (M5)","runtime":"iOS 27.2","udid":"UDID-IPAD"},{"name":"iPhone 17","runtime":"iOS 27.2","udid":"UDID-272"}]"#
+      let message =
+        #"3 simulators are booted and none is named: iPhone 17 (iOS 27.0) UDID-270; iPad Pro 13-inch (M5) (iOS 27.2) UDID-IPAD; iPhone 17 (iOS 27.2) UDID-272. Pass `inspector init --udid <udid>`, or pin it as "udid" in `.inspector/config.json`"#
+      let error = try JSONDecoder().decode(JSONValue.self, from: Data(outcome.stderr.utf8))
+      #expect(outcome.exitCode == 1)
+      #expect(error["code"] == "DEVICE_AMBIGUOUS")
+      #expect(error["detail"]?.stringValue == detail)
+      #expect(error["message"]?.stringValue == message)
+      #expect(xcode.launched.isEmpty)
+      #expect(!processes.commands.contains(["/usr/bin/xed", "-b", sandbox.url("app/Demo.xcodeproj").path]))
+      #expect(sandbox.read("app/.inspector/config.json") == nil)
+    }
+  }
+
+  @Test("init with several simulators booted asks Xcode for the one --udid names, and pins it")
+  func severalBootedWithOption() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.makeDirectory("app/Demo.xcodeproj")
+      let xcode = FakeXcode { call in
+        guard call.tool == "DeviceInteractionStartWorkspaceSession" else { return Self.xcode().reply(call) }
+        return .text(#"{"deviceIsSimulator":true,"deviceUUID":"UDID-272","interactionSessionKey":"s"}"#)
+      }
+      let processes = Self.processes(booted: Self.threeBooted)
+      let environment = processes.environment(xcode.environment(serving: try await demoApp()))
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["init", "--udid", "UDID-272"], in: sandbox.environment(environment, in: "app"))
+
+      #expect(outcome.exitCode == 0)
+      #expect(
+        xcode.calls.first { $0.tool == "DeviceInteractionStartWorkspaceSession" }?.arguments["deviceIdentifier"]
+          == "UDID-272")
+      #expect(try sandbox.json("app/.inspector/config.json")["udid"] == "UDID-272")
+    }
+  }
+
+  @Test("init with several simulators booted asks Xcode for the udid config.json pins")
+  func severalBootedWithPinnedDevice() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.makeDirectory("app/Demo.xcodeproj")
+      try sandbox.write("app/.inspector/config.json", #"{"udid":"UDID-1"}"#)
+      let xcode = Self.xcode()
+      let processes = Self.processes(booted: Self.threeBooted)
+      let environment = processes.environment(xcode.environment(serving: try await demoApp()))
+
+      let outcome = await InspectorCLI.outcome(of: ["init"], in: sandbox.environment(environment, in: "app"))
+
+      #expect(outcome.exitCode == 0)
+      #expect(
+        xcode.calls.first { $0.tool == "DeviceInteractionStartWorkspaceSession" }?.arguments["deviceIdentifier"]
+          == "UDID-1")
+      #expect(!processes.commands.contains { $0.last == "--json" })
+    }
+  }
+
+  @Test("init with one simulator booted lets Xcode choose, as without the check")
+  func oneBooted() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.makeDirectory("app/Demo.xcodeproj")
+      let xcode = Self.xcode()
+      let processes = Self.processes(
+        booted: #"{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-27-2":[{"name":"iPhone 17","state":"Booted","udid":"UDID-1"}]}}"#)
+      let environment = processes.environment(xcode.environment(serving: try await demoApp()))
+
+      let outcome = await InspectorCLI.outcome(of: ["init"], in: sandbox.environment(environment, in: "app"))
+
+      #expect(outcome.exitCode == 0)
+      #expect(
+        xcode.calls.first { $0.tool == "DeviceInteractionStartWorkspaceSession" }?.arguments["deviceIdentifier"] == nil)
+      #expect(try sandbox.json("app/.inspector/config.json")["udid"] == "UDID-1")
     }
   }
 
@@ -432,7 +531,9 @@ struct InitCommandTests {
     }
   }
 
-  @Test("--reset and --workspace need a build; with --warm they are usage errors", arguments: ["--reset", "--workspace=x"])
+  @Test(
+    "--reset, --workspace and --udid need a build; with --warm they are usage errors",
+    arguments: ["--reset", "--workspace=x", "--udid=x"])
   func warmUsage(option: String) async throws {
     let outcome = await InspectorCLI.outcome(of: ["init", "--warm", option], in: try await demoApp())
 

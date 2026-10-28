@@ -14,7 +14,9 @@ struct InitCommand: InspectorCommand {
       `hello` and `state` of the app that already serves, for when no code changed since the \
       last run. The answer is `{"config","hello","state"}`. The app keeps its data unless \
       `--reset` uninstalls it first. `--app` names the app when several serve, and the scheme \
-      to build when the workspace has one of that name.
+      to build when the workspace has one of that name. The simulator is `--udid`, else the \
+      `udid` in `config.json`, else the only booted one; with several booted and none named, \
+      `init` stops with `DEVICE_AMBIGUOUS` instead of guessing.
       """)
 
   static let createsFolder = true
@@ -32,9 +34,13 @@ struct InitCommand: InspectorCommand {
       "The `.xcworkspace` or `.xcodeproj` to build, when the repository has several.", valueName: "path"))
   var workspace: String?
 
+  @Option(help: ArgumentHelp("The simulator to run on, when several are booted.", valueName: "udid"))
+  var udid: String?
+
   func validate() throws {
     if warm, reset { throw ValidationError("`--reset` needs a build; it cannot go with `--warm`.") }
     if warm, workspace != nil { throw ValidationError("`--workspace` needs a build; it cannot go with `--warm`.") }
+    if warm, udid != nil { throw ValidationError("`--udid` needs a build; it cannot go with `--warm`.") }
   }
 
   func answer(in environment: Environment) async throws(InspectorError) -> any Encodable {
@@ -81,10 +87,12 @@ struct InitCommand: InspectorCommand {
     // Xcode names a workspace by its path without the trailing slash of a directory URL.
     var path = location.standardizedFileURL.path(percentEncoded: false)
     if path.hasSuffix("/") { path.removeLast() }
+    let device = try await Self.device(named: udid ?? previous?.udid, in: environment)
     let initializeTimeout = try await Self.startXcode(opening: path, in: environment)
     var config = try await XcodeBridge.connect(launch: environment.launchBridge, initializeTimeout: initializeTimeout) {
       xcode throws(InspectorError) in
-      try await launch(path, repository: root.lastPathComponent, previous: previous, in: folder, environment, on: xcode)
+      try await launch(
+        path, repository: root.lastPathComponent, device: device, previous: previous, in: folder, environment, on: xcode)
     }
     let hello: Hello
     let state: JSONValue
@@ -106,7 +114,7 @@ struct InitCommand: InspectorCommand {
   /// Everything in Xcode: the workspace, scheme and app target, a new session, the build. Writes
   /// `config.json` once the session runs, so `inspector end` reaches it even when the build fails.
   private func launch(
-    _ path: String, repository: String, previous: InspectorConfig?, in folder: InspectorFolder,
+    _ path: String, repository: String, device: String?, previous: InspectorConfig?, in folder: InspectorFolder,
     _ environment: Environment, on xcode: XcodeBridge
   ) async throws(InspectorError) -> InspectorConfig {
     let opened = try await Self.openWorkspace(path, on: xcode)
@@ -124,7 +132,7 @@ struct InitCommand: InspectorCommand {
         .endSession, [SessionTool.endSession.sessionParameter: .string(old)])
     }
     let session = DeviceSession.newName(repository: repository, at: environment.now())
-    let udid = try await DeviceSession.start(session, workspace: workspace, device: previous?.udid, on: xcode)
+    let udid = try await DeviceSession.start(session, workspace: workspace, device: device, on: xcode)
     let config = InspectorConfig(
       app: options.app ?? executable, bundleId: bundleID, udid: udid, session: session, workspace: workspace,
       scheme: scheme, logSubsystem: bundleID.map(Self.logSubsystem(forBundleID:)))
@@ -143,6 +151,28 @@ struct InitCommand: InspectorCommand {
       [SessionTool.installAndRun.sessionParameter: .string(session), "workspaceIdentifier": .string(workspace)],
       timeout: .seconds(1200))
     return config
+  }
+
+  /// The simulator to ask Xcode for: `named`, else nothing while at most one is booted.
+  ///
+  /// - Throws: ``ErrorCode/deviceAmbiguous`` when several are booted: Xcode's own pick once took
+  ///   a simulator another session was using.
+  private static func device(
+    named udid: String?, in environment: Environment
+  ) async throws(InspectorError) -> String? {
+    if let udid { return udid }
+    let listed = try await environment.runProcess(["/usr/bin/xcrun", "simctl", "list", "devices", "booted", "--json"])
+    try check(listed)
+    let booted = BootedSimulator.parse(listed.stdout)
+    guard booted.count > 1 else { return nil }
+    let lines = booted.map { "\($0.name) (\($0.runtime)) \($0.udid)" }
+    throw InspectorError(
+      code: .deviceAmbiguous,
+      message: """
+        \(booted.count) simulators are booted and none is named: \(lines.joined(separator: "; ")). Pass \
+        `inspector init --udid <udid>`, or pin it as "udid" in `.inspector/config.json`
+        """,
+      detail: WireJSON.line(JSONValue.array(booted.map(\.json))))
   }
 
   /// Starts Xcode with the workspace when it is not running and returns how long to wait for its
@@ -336,6 +366,41 @@ struct InitCommand: InspectorCommand {
     guard output.status != 0 else { return }
     let text = (output.stderr.isEmpty ? output.stdout : output.stderr).trimmingCharacters(in: .whitespacesAndNewlines)
     throw InspectorError(code: .badRequest, message: "a program `init` runs failed: \(text)", detail: text)
+  }
+
+  /// A simulator `simctl list devices booted --json` reports.
+  struct BootedSimulator: Equatable {
+    var name: String
+    /// `iOS 27.2` for the runtime `com.apple.CoreSimulator.SimRuntime.iOS-27-2`.
+    var runtime: String
+    var udid: String
+
+    var json: JSONValue {
+      .object(["name": .string(name), "runtime": .string(runtime), "udid": .string(udid)])
+    }
+
+    /// The booted simulators in `simctl`'s JSON, sorted by runtime and name; none for text that
+    /// is no such JSON.
+    static func parse(_ text: String) -> [BootedSimulator] {
+      guard let listed = try? JSONDecoder().decode(JSONValue.self, from: Data(text.utf8)),
+        let runtimes = listed.objectValue?["devices"]?.objectValue
+      else { return [] }
+      let simulators = runtimes.flatMap { key, devices in
+        (devices.arrayValue ?? []).compactMap { device -> BootedSimulator? in
+          guard let fields = device.objectValue, fields["state"]?.stringValue == "Booted",
+            let name = fields["name"]?.stringValue, let udid = fields["udid"]?.stringValue
+          else { return nil }
+          return BootedSimulator(name: name, runtime: runtimeName(key), udid: udid)
+        }
+      }
+      return simulators.sorted { ($0.runtime, $0.name, $0.udid) < ($1.runtime, $1.name, $1.udid) }
+    }
+
+    private static func runtimeName(_ identifier: String) -> String {
+      let parts = (identifier.components(separatedBy: ".").last ?? identifier).components(separatedBy: "-")
+      let version = parts.dropFirst().prefix { !$0.isEmpty && $0.allSatisfy(\.isNumber) }
+      return version.isEmpty ? parts[0] : parts[0] + " " + version.joined(separator: ".")
+    }
   }
 
   /// What `init` answers: the binding it wrote and the first observation.

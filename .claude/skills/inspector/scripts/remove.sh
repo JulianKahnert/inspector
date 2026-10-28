@@ -55,6 +55,9 @@ for dir in "${dirs[@]}"; do
   roots+=("$root")
 done
 
+# shellcheck source=lib/removal.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/removal.sh"
+
 # MARK: - --check
 
 # base_ref <root>: --base, else the default branch of the current branch's remote, else origin's.
@@ -77,6 +80,7 @@ base_ref() {
 
 findings=""
 finding_count=0
+damage_count=0
 # add_finding <kind> <root> <where>
 add_finding() {
   [[ -z "$findings" ]] || findings+=","
@@ -84,9 +88,10 @@ add_finding() {
   finding_count=$((finding_count + 1))
 }
 
-# check_repo <root> <merge base>: adds a finding for every trace of the integration.
+# check_repo <root> <merge base>: adds a finding for every trace of the integration, and for every
+# change remove.sh must not have made.
 check_repo() {
-  local root="$1" merge_base="$2" line path file new hits
+  local root="$1" merge_base="$2" line path file new hits unexpected kept
   # 1. Any marker, in tracked files and in untracked ones git would pick up.
   while IFS= read -r line; do
     add_finding marker "$root" "$line"
@@ -116,6 +121,26 @@ check_repo() {
     hits="$(comm -12 <(printf '%s\n' "$new" | sed '/^$/d') <(inspector_pins) | paste -sd, -)"
     [[ -z "$hits" ]] || add_finding resolved "$root" "$file: $hits"
   done < <(resolved_files "$root")
+
+  # 5. A tracked file deleted in the working tree but not staged: no integration step deletes one.
+  while IFS= read -r path; do
+    add_finding deleted "$root" "$path"
+    damage_count=$((damage_count + 1))
+  done < <(git -C "$root" ls-files --deleted)
+
+  # 6. Paths remove.sh changed outside the integration, until they match the index again.
+  unexpected="$(unexpected_file "$root")"
+  [[ -f "$unexpected" ]] || return 0
+  kept=""
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    [[ -n "$(git -C "$root" status --porcelain --untracked-files=all -- ":(literal)$path")" ]] || continue
+    kept+="$path"$'\n'
+    git -C "$root" ls-files --deleted -- ":(literal)$path" | grep -q . && continue
+    add_finding unexpected "$root" "$path"
+    damage_count=$((damage_count + 1))
+  done < <(sort -u "$unexpected")
+  if [[ -n "$kept" ]]; then printf '%s' "$kept" >"$unexpected"; else rm -f "$unexpected"; fi
 }
 
 run_check() {
@@ -130,8 +155,11 @@ run_check() {
     answers+="$separator{\"base\":$(json_str "$ref"),\"repo\":$(json_str "$root")}"
     separator=","
   done
-  if [[ $finding_count -gt 0 ]]; then
-    fail INTEGRATION_LEFT "the debug integration is still in $finding_count place(s); run remove.sh" "[$findings]"
+  if [[ $finding_count -gt $damage_count ]]; then
+    fail INTEGRATION_LEFT "the debug integration is still in $((finding_count - damage_count)) place(s); run remove.sh" "[$findings]"
+  fi
+  if [[ $damage_count -gt 0 ]]; then
+    fail UNEXPECTED_CHANGE "$damage_count file(s) deleted or changed outside the integration; restore each with git checkout -- <path>, or git rm a deletion you meant" "[$findings]"
   fi
   printf '{"clean":true,"repos":[%s]}\n' "$answers"
 }
@@ -143,14 +171,19 @@ fi
 
 # MARK: - Removal
 
-# shellcheck source=lib/removal.sh
-source "$(dirname "${BASH_SOURCE[0]}")/lib/removal.sh"
-
 answers=""
 separator=""
+unexpected=()
 for root in "${roots[@]}"; do
   remove_integration "$root"
   answers+="$separator$removal_json"
   separator=","
+  for path in ${removal_unexpected[@]+"${removal_unexpected[@]}"}; do
+    unexpected+=("$root/$path")
+  done
 done
+if [[ ${#unexpected[@]} -gt 0 ]]; then
+  fail UNEXPECTED_CHANGE "remove.sh changed ${#unexpected[@]} file(s) outside the integration; restore each with git checkout -- <path>" \
+    "{\"repos\":[$answers],\"unexpected\":$(json_strings "${unexpected[@]}")}"
+fi
 printf '{"repos":[%s]}\n' "$answers"

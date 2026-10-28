@@ -43,8 +43,10 @@ Xcode keeps its approval, and passes the arguments through.
    installs and starts the app through Xcode in a new session, writes `.inspector/config.json`
    (which binds every later call to this app and simulator) and answers
    `{"config","hello","state"}`. Run it cold after every code change; with no change since the
-   last run and the app still serving, `init --warm` only reads it. An app you cannot start
-   (a Mac app, a physical device) needs no `init` for state and actions: `hello`, then `state`.
+   last run and the app still serving, `init --warm` only reads it. With several simulators
+   booted, `init` needs `--udid <udid>` (or `udid` in `config.json`) and stops with
+   `DEVICE_AMBIGUOUS` until it has one; never pick one the user did not name. An app you cannot
+   start (a Mac app, a physical device) needs no `init` for state and actions: `hello`, then `state`.
    Gestures exist only in the simulator, after `init`. Done when `init` answered with a state.
 2. **Find where the app is.** The keys in that state are the screens alive now; a sheet left open
    by an earlier run shows up as its key. The route starts there. `catalog` lists the actions with
@@ -137,7 +139,8 @@ Every sheet and pushed screen gets a close action. Details, rules and the templa
 - `scripts/integrate.sh <repo> --from <store dir> | --into <target path>`: adds an ephemeral
   integration.
 - `scripts/remove.sh [<repo…>]`: takes it out again; `--check [--base <ref>]` exits 1 while
-  anything of it is left.
+  anything of it is left, or while a tracked file is deleted or a file `remove.sh` changed
+  outside the integration still differs.
 - `scripts/add-to-package.sh <package dir> <target> [--ios-only] [--copy-template]`: adds
   InspectorKit to one package target, marked.
 
