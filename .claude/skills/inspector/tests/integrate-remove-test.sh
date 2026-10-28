@@ -466,6 +466,36 @@ test_remove_takes_out_marked_lines_without_a_record() {
   expect_status 0
 }
 
+test_remove_keeps_a_tracked_file_with_the_marker_on_its_first_line() {
+  make_app "$tmp/app"
+  local main="$tmp/app/Sources/App/main.swift"
+  { printf 'import InspectorKit // DEBUG INSPECTOR\n'; git -C "$tmp/app" show HEAD:Sources/App/main.swift; } >"$main.new"
+  mv "$main.new" "$main"
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_error INTEGRATION_LEFT
+  expect_contains 'Sources/App/main.swift:1' "$err"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  [[ -f "$main" ]] || fail "tracked main.swift was deleted"
+  expect_contains '"deleted":[]' "$out"
+  expect_contains 'Sources/App/main.swift:1' "$out"
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_status 0
+  expect_clean_tree "$tmp/app"
+}
+
+test_remove_deletes_an_untracked_file_with_the_marker_on_its_first_line() {
+  make_app "$tmp/app"
+  printf '// DEBUG INSPECTOR\nimport InspectorKit\n' >"$tmp/app/Sources/App/Extra.swift"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  [[ ! -e "$tmp/app/Sources/App/Extra.swift" ]] || fail "untracked Extra.swift left behind"
+  expect_contains '"deleted":["Sources/App/Extra.swift"]' "$out"
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_status 0
+  expect_clean_tree "$tmp/app"
+}
+
 test_remove_keeps_the_exclude_entry_while_another_worktree_is_integrated() {
   make_app "$tmp/app"
   git -C "$tmp/app" worktree add -q -b other "$tmp/app-other"
