@@ -41,7 +41,8 @@ Xcode keeps its approval, and passes the arguments through.
 
 1. **Start the app.** In the app's repository run `scripts/inspector.sh init`. It builds,
    installs and starts the app through Xcode in a new session, writes `.inspector/config.json`
-   (which binds every later call to this app and simulator) and answers
+   (which binds every later call to this app and simulator; an iOS app gets this worktree's own
+   simulator, created once and kept, never one another session holds) and answers
    `{"config","hello","state"}`. Run it cold after every code change; with no change since the
    last run and the app still serving, `init --warm` only reads it. An app you cannot start
    (a Mac app, a physical device) needs no `init` for state and actions: `hello`, then `state`.

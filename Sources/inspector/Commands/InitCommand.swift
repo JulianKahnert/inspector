@@ -14,7 +14,9 @@ struct InitCommand: InspectorCommand {
       `hello` and `state` of the app that already serves, for when no code changed since the \
       last run. The answer is `{"config","hello","state"}`. The app keeps its data unless \
       `--reset` uninstalls it first. `--app` names the app when several serve, and the scheme \
-      to build when the workspace has one of that name.
+      to build when the workspace has one of that name. An iOS app runs on this worktree's own \
+      simulator, `<ticket key or repository> inspector <device type>`, created once and kept; \
+      `--udid` picks another one no other session holds.
       """)
 
   static let createsFolder = true
@@ -32,7 +34,11 @@ struct InitCommand: InspectorCommand {
       "The `.xcworkspace` or `.xcodeproj` to build, when the repository has several.", valueName: "path"))
   var workspace: String?
 
+  @Option(help: ArgumentHelp("The simulator to run an iOS app on, instead of this worktree's own.", valueName: "udid"))
+  var udid: String?
+
   func validate() throws {
+    if warm, udid != nil { throw ValidationError("`--udid` needs a build; it cannot go with `--warm`.") }
     if warm, reset { throw ValidationError("`--reset` needs a build; it cannot go with `--warm`.") }
     if warm, workspace != nil { throw ValidationError("`--workspace` needs a build; it cannot go with `--warm`.") }
   }
@@ -118,13 +124,15 @@ struct InitCommand: InspectorCommand {
     let bundleID = Self.buildSetting("PRODUCT_BUNDLE_IDENTIFIER", in: settings.json)
     let executable =
       Self.buildSetting("EXECUTABLE_NAME", in: settings.json) ?? Self.buildSetting("PRODUCT_NAME", in: settings.json)
+    // Before the old session ends, so a simulator in use leaves it running.
+    let device = try await simulator(for: settings.json, previous: previous, in: folder, environment)
     if let old = previous?.session {
       // Its app ends with it; Xcode answers a session it no longer knows without an error.
       _ = try await xcode.call(
         .endSession, [SessionTool.endSession.sessionParameter: .string(old)])
     }
     let session = DeviceSession.newName(repository: repository, at: environment.now())
-    let udid = try await DeviceSession.start(session, workspace: workspace, device: previous?.udid, on: xcode)
+    let udid = try await DeviceSession.start(session, workspace: workspace, device: device, on: xcode)
     let config = InspectorConfig(
       app: options.app ?? executable, bundleId: bundleID, udid: udid, session: session, workspace: workspace,
       scheme: scheme, logSubsystem: bundleID.map(Self.logSubsystem(forBundleID:)))
@@ -143,6 +151,30 @@ struct InitCommand: InspectorCommand {
       [SessionTool.installAndRun.sessionParameter: .string(session), "workspaceIdentifier": .string(workspace)],
       timeout: .seconds(1200))
     return config
+  }
+
+  /// The device to ask Xcode for: for an iOS app (`SDKROOT` is `iphoneos`, or an iPhoneOS or
+  /// iPhoneSimulator SDK path) this worktree's own
+  /// simulator, see ``Simulator``; for any other app `--udid` or the old `udid`, else Xcode's run
+  /// destination.
+  private func simulator(
+    for settings: JSONValue, previous: InspectorConfig?, in folder: InspectorFolder, _ environment: Environment
+  ) async throws(InspectorError) -> String? {
+    let sdk = Self.buildSetting("SDKROOT", in: settings) ?? ""
+    guard sdk.localizedCaseInsensitiveContains("iphoneos") || sdk.localizedCaseInsensitiveContains("iphonesimulator")
+    else { return udid ?? previous?.udid }
+    // `TARGETED_DEVICE_FAMILY` is `1` for iPhone, `2` for iPad, `1,2` for both.
+    let families = (Self.buildSetting("TARGETED_DEVICE_FAMILY", in: settings) ?? "1").split(separator: ",")
+    let family: Simulator.Family = families.contains("1") || families.isEmpty ? .iPhone : .iPad
+    let root = FolderLookup.repositoryRoot(from: environment.workingDirectory)
+    let branch = try await environment.runProcess([
+      "/usr/bin/git", "-C", root.path(percentEncoded: false), "rev-parse", "--abbrev-ref", "HEAD",
+    ])
+    let label = Simulator.label(
+      branch: branch.status == 0 ? branch.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
+      directory: root.lastPathComponent)
+    return try await Simulator.choose(
+      requested: udid, previous: previous?.udid, label: label, family: family, folder: folder, in: environment)
   }
 
   /// Starts Xcode with the workspace when it is not running and returns how long to wait for its

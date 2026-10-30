@@ -60,6 +60,7 @@ changes nothing.
 | `XCODE_ERROR` | Xcode says the agent or client is not approved or allowed | Human | As for `NOT_APPROVED` |
 | `XCODE_ERROR` | `Session with that key doesn't exist` while `init` installs | Agent | Cold `init` once more |
 | `XCODE_ERROR` | Anything else; `detail` is Xcode's text | Agent | Take the step Xcode's text names; none named: report the text |
+| `DEVICE_IN_USE` | `init --udid` names a simulator another worktree's live session holds; `detail` is that `.inspector/` folder | Agent | `init` without `--udid`, which takes this worktree's own simulator |
 | `NO_HIERARCHY` | A capture came back without a hierarchy; `detail` is Xcode's answer | Agent | `capture` again; still none: read the screenshot at the path in `detail` |
 | `TARGET_NOT_FOUND` | No target has that identifier or label; `detail` lists every target | Agent | Name one from `detail`; a control with neither identifier nor label: tap its `hitPoint` coordinates |
 | `TARGET_AMBIGUOUS` | Targets at several points have it; `detail` lists them | Agent | Name the identifier, or tap the right one's `hitPoint` coordinates |
