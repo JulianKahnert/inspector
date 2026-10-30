@@ -104,6 +104,7 @@ struct Sandbox {
   func environment(_ environment: Environment, in path: String = "") -> Environment {
     var environment = environment
     environment.workingDirectory = path.isEmpty ? root : url(path)
+    environment.simulatorClaims = url("simulator-claims")
     return environment
   }
 }

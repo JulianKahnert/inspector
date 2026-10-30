@@ -91,7 +91,7 @@ flowchart LR
 inspector [--app name] apps | hello | catalog | state [path]
                       | send <path> [json] [--until <match> [--timeout s]]
                       | wait <match> [--timeout s]
-inspector init [--warm] [--reset] | capture | end
+inspector init [--warm] [--reset] [--udid <udid>] | capture | end
 inspector tap (<x> <y> | --target <name>) | swipe <x1> <y1> <x2> <y2> [s] | type <text>
                       [--until <match> [--timeout s]]
 ```
@@ -176,7 +176,7 @@ The rules per command are in [ADR 004](docs/adr/004-cli.md#the-inspector-folder)
 
 ### Commands through Xcode
 
-`inspector init`, run in the app's repository, builds, installs and starts the app through Xcode in a new device interaction session, then answers with the `config.json` it wrote, `hello` and the whole `state`. It starts Xcode when it is not running and opens the repository's workspace. `--warm` skips Xcode and only reads an app that already serves, for when no code changed; `--reset` uninstalls the app first, which deletes its data. `inspector end` ends the session `config.json` names, and the app that session started with it. Such commands call Xcode's tools through `xcrun mcpbridge`, one short-lived bridge per call, and Xcode serves them only once a human approved the binary in Xcode's dialog. Xcode recognizes the binary by its signature, so run it through the skill's `scripts/inspector.sh`, which signs every build with your "Apple Development" identity and the identifier `de.juliankahnert.inspector`; a plain `swift build` leaves a signature Xcode refuses.
+`inspector init`, run in the app's repository, builds, installs and starts the app through Xcode in a new device interaction session, then answers with the `config.json` it wrote, `hello` and the whole `state`. It starts Xcode when it is not running and opens the repository's workspace. `--warm` skips Xcode and only reads an app that already serves, for when no code changed; `--reset` uninstalls the app first, which deletes its data. An iOS app runs on the worktree's own simulator, `<ticket key or repository> inspector <device type>`, which the first `init` creates and every later one reuses, so its data survives; a simulator another worktree's live session holds is never taken, and `--udid` picks another free one. `inspector end` ends the session `config.json` names, and the app that session started with it. Such commands call Xcode's tools through `xcrun mcpbridge`, one short-lived bridge per call, and Xcode serves them only once a human approved the binary in Xcode's dialog. Xcode recognizes the binary by its signature, so run it through the skill's `scripts/inspector.sh`, which signs every build with your "Apple Development" identity and the identifier `de.juliankahnert.inspector`; a plain `swift build` leaves a signature Xcode refuses.
 
 ```console
 $ scripts/inspector.sh init | jq -c .config      # from the app's repository

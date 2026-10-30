@@ -60,6 +60,7 @@ changes nothing.
 | `XCODE_ERROR` | Xcode says the agent or client is not approved or allowed | Human | As for `NOT_APPROVED` |
 | `XCODE_ERROR` | `Session with that key doesn't exist` while `init` installs | Agent | Cold `init` once more |
 | `XCODE_ERROR` | Anything else; `detail` is Xcode's text | Agent | Take the step Xcode's text names; none named: report the text |
+| `DEVICE_IN_USE` | `init --udid` names a simulator another worktree's live session holds; `detail` is that `.inspector/` folder | Agent | `init` without `--udid`, which takes this worktree's own simulator |
 | `NO_HIERARCHY` | A capture came back without a hierarchy; `detail` is Xcode's answer | Agent | `capture` again; still none: read the screenshot at the path in `detail` |
 | `TARGET_NOT_FOUND` | No target has that identifier or label; `detail` lists every target | Agent | Name one from `detail`; a control with neither identifier nor label: tap its `hitPoint` coordinates |
 | `TARGET_AMBIGUOUS` | Targets at several points have it; `detail` lists them | Agent | Name the identifier, or tap the right one's `hitPoint` coordinates |
@@ -81,5 +82,6 @@ stderr, exits 1 on failure with the manifest restored, and 2 on a usage error.
 | `PLIST_INVALID` | Agent | `plutil -convert xml1 <plist>`, then `integrate.sh` again |
 | `INTEGRATION_LEFT` | Agent | `scripts/remove.sh`; a `diff` or `tracked` finding in a commit: change that commit |
 | `INTEGRATION_LEFT` with a `resolved` finding: a build or `swift run` added InspectorKit's pins to a `Package.resolved` | Agent | `scripts/remove.sh`, which puts the file back as it was; never commit the pins |
+| `INTEGRATION_LEFT` with a `deleted` finding: a tracked file is gone but not `git rm`ed | Agent | `git restore <path>`; only a deletion the task asked for: `git rm <path>` |
 | `BASE_NOT_FOUND` | Agent | `--base <branch>` |
 | `NOT_A_REPO`, `NOT_AN_APP_REPO` | Agent | Pass an app's checkout, not a plain folder or the inspector repository |

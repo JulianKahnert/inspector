@@ -106,7 +106,10 @@ file_path="$target_path/DebugInspector.swift"
 package_dir=""
 project_files=()
 if [[ -n "$package_option" ]]; then
-  package_dir="$root/$(repo_path "$package_option")"
+  package_dir="$(repo_path "$package_option")"
+  # `.` is the repository itself; "$root/." would record the manifest as ./Package.swift, a path
+  # git apply cannot reverse.
+  if [[ -z "$package_dir" || "$package_dir" == "." ]]; then package_dir="$root"; else package_dir="$root/$package_dir"; fi
   [[ -f "$package_dir/Package.swift" ]] ||
     fail PACKAGE_NOT_FOUND "no Package.swift in $package_option" "$(json_str "$package_option")"
 else
