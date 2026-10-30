@@ -81,5 +81,6 @@ stderr, exits 1 on failure with the manifest restored, and 2 on a usage error.
 | `PLIST_INVALID` | Agent | `plutil -convert xml1 <plist>`, then `integrate.sh` again |
 | `INTEGRATION_LEFT` | Agent | `scripts/remove.sh`; a `diff` or `tracked` finding in a commit: change that commit |
 | `INTEGRATION_LEFT` with a `resolved` finding: a build or `swift run` added InspectorKit's pins to a `Package.resolved` | Agent | `scripts/remove.sh`, which puts the file back as it was; never commit the pins |
+| `INTEGRATION_LEFT` with a `deleted` finding: a tracked file is gone but not `git rm`ed | Agent | `git restore <path>`; only a deletion the task asked for: `git rm <path>` |
 | `BASE_NOT_FOUND` | Agent | `--base <branch>` |
 | `NOT_A_REPO`, `NOT_AN_APP_REPO` | Agent | Pass an app's checkout, not a plain folder or the inspector repository |

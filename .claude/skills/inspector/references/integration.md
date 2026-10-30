@@ -194,9 +194,10 @@ directly below it, such as the checkouts in a workspace.
 `remove.sh` reverses the recorded patches, which also drops the lines SwiftPM added without a
 marker (`dependencies: [`, a comma), restores each `Package.resolved` that gained only
 InspectorKit's pins, deletes every untracked file whose first line carries the marker, removes
-every marked line left (in a file git tracks only those lines go, even on its first line), removes `.inspector/` and its exclude entry (`init` writes the same marked entry), unless
-another worktree of the repository still has a `.inspector/`. A file changed so its patch no longer applies
-loses only its marked lines, and the answer's `notes` says which.
+every marked line left (in a file git tracks only those lines go, even on its first line), removes
+`.inspector/` and its exclude entry (`init` writes the same marked entry), unless another worktree
+of the repository still has a `.inspector/`. A file changed so its patch no longer applies loses
+only its marked lines, and the answer's `notes` says which.
 
 `--check` exits 1 with `INTEGRATION_LEFT` while any of these is left, and `detail` lists each with
 `kind`, `repo` and `where`:
@@ -207,6 +208,7 @@ loses only its marked lines, and the answer's `notes` says which.
 | `diff` | `InspectorKit` on a line added since the base branch, or in such an untracked file |
 | `tracked` | a file under `.inspector/` in the index |
 | `resolved` | a `Package.resolved` that gained a pin InspectorKit's package brings |
+| `deleted` | a tracked file gone from the working tree but still in the index; `git restore <path>` brings it back, `git rm <path>` keeps a deletion you meant |
 
 The base is `--base <ref>`, else the default branch of the current branch's remote
 (`refs/remotes/<remote>/HEAD`), else `origin`'s. Without one it fails with `BASE_NOT_FOUND`;
