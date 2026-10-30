@@ -42,6 +42,7 @@ Run `scripts/inspector.sh init` from the app's repository. It ends once `state` 
 
 - **Cold** (the default; after every code change): starts Xcode with `xed -b` when it is not running, opens the repository's workspace, ends the session the old `config.json` names, starts a new one, builds, installs and starts the app with the active scheme, then reads `hello` and `state`. It takes the build time plus a few seconds; with the build up to date about 11 s.
 - **Warm** (`--warm`; you decide that no code changed since the last run): only `hello` and `state` of the app that serves, well under a second, no build, the session untouched. It finds only an app that runs outside a session, for example after `xcrun simctl launch <udid> <bundleId>` of the installed build, because the app of an expired session is gone.
+- **Simulator**: a cold `init` reuses `udid` from the existing `config.json`, whatever Xcode's active run destination is. To switch simulators, set `udid` in `config.json` before `init`.
 - **`--reset`** uninstalls the app before the install, which deletes its data. Use it only when the task needs a fresh app; init never logs in.
 - **`--app <name>`** picks the app when several serve, and the scheme to build when the workspace has a scheme of that name. **`--workspace <path>`** picks the workspace when the repository has several.
 - `config.json` gets every field, `instance` being the full name `hello` reported and `logSubsystem` the bundle ID's vendor prefix (`de.juliankahnert.`), so `logs.sh` covers the app's packages too; `.inspector/` goes into `.git/info/exclude` when nothing ignores it yet.
@@ -132,6 +133,13 @@ on the screen; every gesture also leaves its `lastScreenshot` and `lastHierarchy
 `.inspector/run.json`. Read `targets` (about 1 KB) to find a control or a typed value; open the
 PNG at `screenshot` only when targets, state and logs leave the question open; leave the
 hierarchy file (5 to 25 KB of text) unread. All of it exists only in the simulator, after `init`.
+
+## Software keyboard and orientation
+
+Simulators run headless since Xcode 27.2, so Simulator.app's menus (Connect Hardware Keyboard, rotate) are gone.
+
+- **No software keyboard on a focused field**: the simulator treats a hardware keyboard as connected. Run `xcrun simctl spawn <udid> defaults write com.apple.keyboard.preferences AutomaticMinimizationEnabled -bool false` (not `com.apple.Preferences`), then cold `init`: the keyboard runs in the app's process and reads the value at launch. iOS can flip it back to `true` (seen with the "slide to type" tip); check with `defaults read` and set it again. A target labelled `shift` in `capture` shows the keyboard is up.
+- **Orientation**: the CLI has no command for it; use Xcode's `DeviceInteractionSynthesize` with `interactionCommand` `orientation landscapeLeft` or `orientation portrait`.
 
 ## Logs
 
