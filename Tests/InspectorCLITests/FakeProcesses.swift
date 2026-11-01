@@ -8,7 +8,8 @@ import Testing
 /// The programs a call runs (`xed`, `simctl`, `git`), in-process: each run is recorded and answered
 /// by `reply`.
 final class FakeProcesses: Sendable {
-  private let reply: @Sendable ([String]) -> ProcessOutput
+  /// The answer to a command line, without recording it.
+  let reply: @Sendable ([String]) -> ProcessOutput
   private let runs = Mutex<[[String]]>([])
 
   init(reply: @escaping @Sendable ([String]) -> ProcessOutput) {

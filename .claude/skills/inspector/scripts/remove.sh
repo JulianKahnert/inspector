@@ -77,6 +77,7 @@ base_ref() {
 
 findings=""
 finding_count=0
+deleted_count=0
 # add_finding <kind> <root> <where>
 add_finding() {
   [[ -z "$findings" ]] || findings+=","
@@ -116,6 +117,14 @@ check_repo() {
     hits="$(comm -12 <(printf '%s\n' "$new" | sed '/^$/d') <(inspector_pins) | paste -sd, -)"
     [[ -z "$hits" ]] || add_finding resolved "$root" "$file: $hits"
   done < <(resolved_files "$root")
+
+  # 5. A tracked file deleted in the working tree but still in the index: remove.sh must never
+  #    cause one, so it is reported whatever deleted it. A deletion that is staged (`git rm`) or
+  #    committed is deliberate and passes.
+  while IFS= read -r path; do
+    add_finding deleted "$root" "$path"
+    deleted_count=$((deleted_count + 1))
+  done < <(git -C "$root" ls-files --deleted | sort -u)
 }
 
 run_check() {
@@ -131,7 +140,13 @@ run_check() {
     separator=","
   done
   if [[ $finding_count -gt 0 ]]; then
-    fail INTEGRATION_LEFT "the debug integration is still in $finding_count place(s); run remove.sh" "[$findings]"
+    local left=$((finding_count - deleted_count)) message=""
+    [[ $left -eq 0 ]] || message="the debug integration is still in $left place(s); run remove.sh"
+    if [[ $deleted_count -gt 0 ]]; then
+      [[ -z "$message" ]] || message+="; "
+      message+="$deleted_count tracked file(s) deleted without git rm; git restore them, or git rm a deletion you meant"
+    fi
+    fail INTEGRATION_LEFT "$message" "[$findings]"
   fi
   printf '{"clean":true,"repos":[%s]}\n' "$answers"
 }

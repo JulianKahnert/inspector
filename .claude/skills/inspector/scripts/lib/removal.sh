@@ -11,11 +11,6 @@
 # A whole file goes only when git does not track it: integrate.sh creates files, it never takes
 # over a tracked one. A tracked file loses only its marked lines, whatever line they are on.
 
-# is_tracked <root> <path>: whether git tracks the file (it is in the index).
-is_tracked() {
-  git -C "$1" ls-files --error-unmatch -- "$2" >/dev/null 2>&1
-}
-
 # remove_integration <root>: undoes the integration in one repository and sets `removal_json`
 # to what it did.
 remove_integration() {
@@ -38,7 +33,10 @@ remove_integration() {
           fi
           ;;
         file)
-          if [[ -e "$root/$path" ]] && ! is_tracked "$root" "$path"; then
+          # A tracked file is never integrate.sh's: it only ever adds untracked ones.
+          if is_tracked "$root" "$path"; then
+            notes+=("$path is tracked by git; left it in place")
+          elif [[ -e "$root/$path" ]]; then
             rm -f "$root/$path"
             deleted+=("$path")
           fi
@@ -82,7 +80,9 @@ remove_integration() {
     [[ -f "$record" ]] && awk -F'\t' '$1 == "resolved" { print $2 }' "$record"
   } | sort -u)
 
-  # 3. Files that are integration as a whole: untracked, with the marker on their first line.
+  # 3. Files that are integration as a whole: untracked, with the marker on their first line. A
+  #    tracked file whose first line is marked (an app's entry point starting with a marked import,
+  #    a committed integration file) is never deleted; step 4 strips only its marked lines.
   while IFS= read -r file; do
     if ! is_tracked "$root" "$file" && head -n 1 "$root/$file" | grep -q "$marker"; then
       rm -f "$root/$file"

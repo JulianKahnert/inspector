@@ -45,6 +45,9 @@ public enum ErrorCode: String, Codable, Equatable, Sendable {
   /// Targets at more than one point have the identifier or label asked for;
   /// ``InspectorError/detail`` lists them, as one line of JSON.
   case targetAmbiguous = "TARGET_AMBIGUOUS"
+  /// The simulator `init --udid` asks for belongs to another live session;
+  /// ``InspectorError/detail`` is the path of that session's `.inspector/` folder.
+  case deviceInUse = "DEVICE_IN_USE"
 }
 
 /// A rejection sent back in place of a normal response.

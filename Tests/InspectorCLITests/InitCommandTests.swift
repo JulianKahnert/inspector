@@ -10,9 +10,14 @@ struct InitCommandTests {
   /// Xcode with the demo workspace open: one app target, its build settings, a session on
   /// `UDID-1` and a build that succeeds.
   static func xcode(
-    installAndRun: FakeXcode.Reply = .text(#"{"userMessage":"Application installed and running"}"#)
+    installAndRun: FakeXcode.Reply = .text(#"{"userMessage":"Application installed and running"}"#),
+    iOS: Bool = false
   ) -> FakeXcode {
-    FakeXcode { call in
+    // An iOS app's target builds against `iphoneos`, for the iPhone.
+    let platform = iOS
+      ? #",{"evaluatedValue":"iphoneos","macroName":"SDKROOT"},{"evaluatedValue":"1","macroName":"TARGETED_DEVICE_FAMILY"}"#
+      : ""
+    return FakeXcode { call in
       switch call.tool {
       case "XcodeOpenWorkspace":
         return .text(
@@ -24,11 +29,11 @@ struct InitCommandTests {
         )
       case "GetTargetBuildSettings":
         return .text(
-          #"{"buildSettings":[{"evaluatedValue":"com.example.demo","macroName":"PRODUCT_BUNDLE_IDENTIFIER"},{"evaluatedValue":"DemoHost","macroName":"PRODUCT_NAME","value":"$(TARGET_NAME)"}],"targetName":"DemoHost"}"#
+          #"{"buildSettings":[{"evaluatedValue":"com.example.demo","macroName":"PRODUCT_BUNDLE_IDENTIFIER"},{"evaluatedValue":"DemoHost","macroName":"PRODUCT_NAME","value":"$(TARGET_NAME)"}\#(platform)],"targetName":"DemoHost"}"#
         )
       case "DeviceInteractionStartWorkspaceSession":
         return .text(
-          #"{"deviceIsSimulator":true,"deviceUUID":"UDID-1","interactionSessionKey":"\#(call.arguments["sessionIdentifier"]?.stringValue ?? "")"}"#
+          #"{"deviceIsSimulator":true,"deviceUUID":"\#(call.arguments["deviceIdentifier"]?.stringValue ?? "UDID-1")","interactionSessionKey":"\#(call.arguments["sessionIdentifier"]?.stringValue ?? "")"}"#
         )
       case "DeviceInteractionInstallAndRun":
         return installAndRun
@@ -432,7 +437,61 @@ struct InitCommandTests {
     }
   }
 
-  @Test("--reset and --workspace need a build; with --warm they are usage errors", arguments: ["--reset", "--workspace=x"])
+  /// `processes()` with `simctl` answered by `simctl`, and the branch `branch`.
+  static func processes(simctl: SimulatorTests.FakeSimctl, branch: String = "feature/abc-123-login") -> FakeProcesses {
+    let base = processes()
+    return FakeProcesses { command in
+      if command.starts(with: ["/usr/bin/xcrun", "simctl"]) { return simctl.reply(command) }
+      if command.last == "HEAD" { return ProcessOutput(status: 0, stdout: branch + "\n") }
+      return base.reply(command)
+    }
+  }
+
+  @Test("init of an iOS app runs it on the worktree's own simulator, named for the branch's key, and writes its udid")
+  func ownSimulator() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.makeDirectory("app/Demo.xcodeproj")
+      let simctl = SimulatorTests.FakeSimctl([.init(udid: "GENERIC", name: "iPhone 18 Pro", state: "Booted")])
+      let xcode = Self.xcode(iOS: true)
+      let processes = Self.processes(simctl: simctl)
+      let environment = processes.environment(xcode.environment(serving: try await demoApp()))
+
+      let outcome = await InspectorCLI.outcome(of: ["init"], in: sandbox.environment(environment, in: "app"))
+      let again = await InspectorCLI.outcome(of: ["init"], in: sandbox.environment(environment, in: "app"))
+
+      #expect(outcome.exitCode == 0)
+      #expect(again.exitCode == 0)
+      #expect(simctl.devices.withLock { $0.map(\.name) } == ["iPhone 18 Pro", "ABC-123 inspector iPhone 18 Pro"])
+      let starts = xcode.calls.filter { $0.tool == "DeviceInteractionStartWorkspaceSession" }
+      #expect(starts.map { $0.arguments["deviceIdentifier"] } == ["NEW-2", "NEW-2"])
+      #expect(try sandbox.json("app/.inspector/config.json")["udid"] == "NEW-2")
+    }
+  }
+
+  @Test("--udid on a simulator another worktree's live session holds ends in DEVICE_IN_USE before any session starts")
+  func udidInUse() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.makeDirectory("app/Demo.xcodeproj")
+      let simctl = SimulatorTests.FakeSimctl([.init(udid: "HELD", name: "ABC-123 inspector iPhone 18 Pro")])
+      try SimulatorTests.liveSession("other/.inspector", on: "HELD", in: sandbox)
+      let xcode = Self.xcode(iOS: true)
+      let environment = Self.processes(simctl: simctl).environment(xcode.environment(serving: try await demoApp()))
+
+      let outcome = await InspectorCLI.outcome(of: ["init", "--udid", "HELD"], in: sandbox.environment(environment, in: "app"))
+
+      let owner = sandbox.url("other/.inspector").path
+      #expect(
+        outcome
+          == .stderr(
+            #"{"code":"DEVICE_IN_USE","detail":"\#(owner)","message":"the simulator `HELD` belongs to the session in `\#(owner)`; run `init` without `--udid`"}"#
+          ))
+      #expect(!xcode.calls.contains { $0.tool == "DeviceInteractionStartWorkspaceSession" })
+    }
+  }
+
+  @Test("--reset, --workspace and --udid need a build; with --warm they are usage errors", arguments: ["--reset", "--workspace=x", "--udid=x"])
   func warmUsage(option: String) async throws {
     let outcome = await InspectorCLI.outcome(of: ["init", "--warm", option], in: try await demoApp())
 
