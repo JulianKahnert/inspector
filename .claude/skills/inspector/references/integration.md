@@ -72,6 +72,15 @@ When a screenshot later shows something the task needed and this state lacks, ad
 - **Say in the action path what an `int` payload means** when it isn't a row index:
   `featureList.open` takes an index, `featureDetail.tapMeterID` a meter id. The catalog lists both
   as `{"kind":"int"}`, so the name is the only hint a caller gets.
+- **A confirm action answers its alert only once the alert is on screen.** UIKit asserts and
+  aborts the app when an alert's state is cleared before its presentation committed, which a
+  confirm sent right after the action that opened it does. So the action first checks that the
+  state holds that confirmation (else a `badRequest` naming it), then waits a bounded time (well
+  under the 5 s settle timeout) until the top presented view controller is a `UIAlertController`
+  with no transition running, and fails naming the alert when it never appears. Put that wait in
+  one helper every confirm action calls, and report the open confirmation and whether it is ready
+  in the screen's state (`confirmation`, `isConfirmationReady`), so a caller can `--until` on it.
+  Then no route needs a pause before confirming.
 - **A close action for every sheet and pushed screen** you register (`featureDetail.close`). The
   inspector has no generic back or dismiss; a sheet without one can only be closed by a
   `tap --target` on its close or cancel button, which needs the simulator.
