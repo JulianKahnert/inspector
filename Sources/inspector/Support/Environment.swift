@@ -17,6 +17,9 @@ struct Environment: Sendable {
   /// The `.env` values this call filled in; ``InspectorCLI/outcome(of:in:)`` starts each call
   /// with none.
   var substitutions = Substitutions()
+  /// Where `init` records which `.inspector/` folder holds which simulator; see ``Simulator``.
+  var simulatorClaims = FileManager.default.temporaryDirectory.appending(
+    path: "inspector-simulator-claims", directoryHint: .isDirectory)
   /// Starts a bridge to Xcode's tools; see ``XcodeBridge``.
   var launchBridge: @Sendable () throws(InspectorError) -> any BridgeProcess = {
     throw InspectorError(code: .xcodeError, message: "this environment has no Xcode")
@@ -37,6 +40,8 @@ struct Environment: Sendable {
       workingDirectory: URL(filePath: FileManager.default.currentDirectoryPath, directoryHint: .isDirectory),
       inspectorDirectory: ProcessInfo.processInfo.environment["INSPECTOR_DIR"],
       now: { Date() },
+      simulatorClaims: URL.applicationSupportDirectory.appending(
+        path: "inspector/simulators", directoryHint: .isDirectory),
       launchBridge: { () throws(InspectorError) in try BridgeSubprocess() },
       runProcess: { command throws(InspectorError) in try await ProcessOutput.run(command) })
   }

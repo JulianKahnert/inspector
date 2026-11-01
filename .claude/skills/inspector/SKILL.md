@@ -29,8 +29,6 @@ Xcode keeps its approval, and passes the arguments through.
 - **Pause about 1 s after a navigation that animates** (push, sheet, alert) before a gesture on
   the new screen. The state reports the screen before it has slid in, and a gesture during the
   animation is lost.
-- **Give an alert about 1 s** after it opens before confirming it, and 1 s after confirming before
-  the next step; an app can crash when its alert is confirmed while it still presents.
 - **End the route at the first failed step.** A route that goes on types into whatever is still
   open and can save into real data. Diagnose, fix, then start again from the state. Steps chained
   in one Bash call go with `&&`.
@@ -41,12 +39,11 @@ Xcode keeps its approval, and passes the arguments through.
 
 1. **Start the app.** In the app's repository run `scripts/inspector.sh init`. It builds,
    installs and starts the app through Xcode in a new session, writes `.inspector/config.json`
-   (which binds every later call to this app and simulator) and answers
+   (which binds every later call to this app and simulator; an iOS app gets this worktree's own
+   simulator, created once and kept, never one another session holds) and answers
    `{"config","hello","state"}`. Run it cold after every code change; with no change since the
-   last run and the app still serving, `init --warm` only reads it. With several simulators
-   booted, `init` needs `--udid <udid>` (or `udid` in `config.json`) and stops with
-   `DEVICE_AMBIGUOUS` until it has one; never pick one the user did not name. An app you cannot
-   start (a Mac app, a physical device) needs no `init` for state and actions: `hello`, then `state`.
+   last run and the app still serving, `init --warm` only reads it. An app you cannot start
+   (a Mac app, a physical device) needs no `init` for state and actions: `hello`, then `state`.
    Gestures exist only in the simulator, after `init`. Done when `init` answered with a state.
 2. **Find where the app is.** The keys in that state are the screens alive now; a sheet left open
    by an earlier run shows up as its key. The route starts there. `catalog` lists the actions with
@@ -139,8 +136,7 @@ Every sheet and pushed screen gets a close action. Details, rules and the templa
 - `scripts/integrate.sh <repo> --from <store dir> | --into <target path>`: adds an ephemeral
   integration.
 - `scripts/remove.sh [<repo…>]`: takes it out again; `--check [--base <ref>]` exits 1 while
-  anything of it is left, or while a tracked file is deleted or a file `remove.sh` changed
-  outside the integration still differs.
+  anything of it is left.
 - `scripts/add-to-package.sh <package dir> <target> [--ios-only] [--copy-template]`: adds
   InspectorKit to one package target, marked.
 

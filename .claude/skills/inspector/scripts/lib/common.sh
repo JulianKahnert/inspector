@@ -141,6 +141,13 @@ resolved_files() {
   git -C "$1" ls-files -co --exclude-standard -- 'Package.resolved' '*/Package.resolved' | sort -u
 }
 
+# is_tracked <root> <path>: whether git tracks the path, in the index or in HEAD (a staged deletion
+# still counts).
+is_tracked() {
+  git -C "$1" ls-files --error-unmatch -- "$2" >/dev/null 2>&1 ||
+    git -C "$1" cat-file -e "HEAD:$2" 2>/dev/null
+}
+
 # exclude_file <root>: the repository's info/exclude, shared by all of its worktrees.
 exclude_file() {
   git -C "$1" rev-parse --path-format=absolute --git-path info/exclude

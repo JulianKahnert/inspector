@@ -139,6 +139,32 @@ test_check_fails_on_a_marker() {
   expect_contains 'Sources/App/main.swift:2' "$err"
 }
 
+test_check_fails_on_a_deleted_tracked_file() {
+  make_app "$tmp/app"
+  rm "$tmp/app/Sources/App/main.swift"
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_error INTEGRATION_LEFT
+  expect_contains '"kind":"deleted"' "$err"
+  expect_contains '"where":"Sources/App/main.swift"' "$err"
+  expect_contains 'git restore them' "$err"
+  expect_not_contains 'run remove.sh' "$err"
+}
+
+test_check_passes_a_staged_deletion() {
+  make_app "$tmp/app"
+  git -C "$tmp/app" rm -q Sources/App/Info.plist
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_status 0
+}
+
+test_check_ignores_a_deletion_committed_on_the_branch() {
+  make_app "$tmp/app"
+  git -C "$tmp/app" rm -q Sources/App/Info.plist
+  git -C "$tmp/app" commit -q -m "Drop the plist"
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_status 0
+}
+
 test_check_fails_on_inspectorkit_in_the_diff_against_the_base() {
   make_app "$tmp/app"
   printf '// uses InspectorKit\n' >>"$tmp/app/Sources/App/main.swift"
@@ -200,35 +226,6 @@ EOF
   expect_error INTEGRATION_LEFT
   expect_contains '"kind":"resolved"' "$err"
   expect_contains 'swift-argument-parser' "$err"
-}
-
-test_check_fails_on_a_tracked_file_deleted_in_the_working_tree() {
-  make_app "$tmp/app"
-  rm "$tmp/app/Sources/App/main.swift"
-  run "$scripts/remove.sh" --check "$tmp/app"
-  expect_error UNEXPECTED_CHANGE
-  expect_contains '"kind":"deleted"' "$err"
-  expect_contains 'Sources/App/main.swift' "$err"
-}
-
-test_check_accepts_a_staged_deletion() {
-  make_app "$tmp/app"
-  git -C "$tmp/app" rm -q Sources/App/Info.plist
-  run "$scripts/remove.sh" --check "$tmp/app"
-  expect_status 0
-}
-
-test_check_fails_on_a_path_remove_changed_outside_the_integration_until_it_is_restored() {
-  make_app "$tmp/app"
-  printf '// changed\n' >>"$tmp/app/Sources/App/main.swift"
-  printf 'Sources/App/main.swift\n' >>"$tmp/app/.git/inspector-unexpected"
-  run "$scripts/remove.sh" --check "$tmp/app"
-  expect_error UNEXPECTED_CHANGE
-  expect_contains '"kind":"unexpected"' "$err"
-  git -C "$tmp/app" checkout -q -- Sources/App/main.swift
-  run "$scripts/remove.sh" --check "$tmp/app"
-  expect_status 0
-  [[ ! -e "$tmp/app/.git/inspector-unexpected" ]] || fail "the resolved record was kept"
 }
 
 test_check_takes_the_base_from_the_option() {
@@ -479,51 +476,6 @@ test_remove_runs_over_every_repo_below_the_workspace_root() {
   expect_clean_tree "$tmp/workspace/two"
 }
 
-# The call site's import sorts first: the tracked file's first line carries the marker.
-test_remove_keeps_a_tracked_file_whose_first_line_is_marked() {
-  make_app "$tmp/app"
-  make_store "$tmp/store/app" Sources/App
-  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
-  expect_status 0
-  perl -0pi -e 's/^/import InspectorKit \/\/ DEBUG INSPECTOR\n/' "$tmp/app/Sources/App/main.swift"
-  run "$scripts/remove.sh" "$tmp/app"
-  expect_status 0
-  expect_contains '"deleted":["Sources/App/DebugInspector.swift"]' "$out"
-  expect_contains 'Sources/App/main.swift:1' "$out"
-  run "$scripts/remove.sh" --check "$tmp/app"
-  expect_status 0
-  expect_clean_tree "$tmp/app"
-}
-
-test_remove_without_a_record_keeps_a_tracked_file_whose_first_line_is_marked() {
-  make_app "$tmp/app"
-  make_store "$tmp/store/app" Sources/App
-  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
-  perl -0pi -e 's/^/import InspectorKit \/\/ DEBUG INSPECTOR\n/' "$tmp/app/Sources/App/main.swift"
-  rm -rf "$tmp/app/.inspector"
-  run "$scripts/remove.sh" "$tmp/app"
-  expect_status 0
-  [[ ! -e "$tmp/app/Sources/App/DebugInspector.swift" ]] || fail "file left behind"
-  [[ -f "$tmp/app/Sources/App/main.swift" ]] || fail "main.swift deleted"
-  git -C "$tmp/app" diff --quiet HEAD -- Sources/App/main.swift ||
-    fail "main.swift still differs: $(git -C "$tmp/app" diff HEAD)"
-}
-
-# A recorded patch that also reaches a file the integration never touched stands in for any step
-# that overreaches.
-test_remove_fails_when_it_changed_a_file_outside_the_integration() {
-  make_app "$tmp/app"
-  make_store "$tmp/store/app" Sources/App
-  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
-  expect_status 0
-  printf '// developer change\n' >>"$tmp/app/Sources/App/main.swift"
-  git -C "$tmp/app" diff --no-color -- Sources/App/main.swift >>"$tmp/app/.inspector/integration/patches/plist.patch"
-  run "$scripts/remove.sh" "$tmp/app"
-  expect_error UNEXPECTED_CHANGE
-  expect_contains 'Sources/App/main.swift' "$err"
-  expect_contains 'Sources/App/main.swift' "$(cat "$tmp/app/.git/inspector-unexpected")"
-}
-
 test_remove_takes_out_marked_lines_without_a_record() {
   make_app "$tmp/app"
   make_store "$tmp/store/app" Sources/App
@@ -538,6 +490,84 @@ test_remove_takes_out_marked_lines_without_a_record() {
   expect_contains 'no record from integrate.sh' "$out"
   run "$scripts/remove.sh" --check "$tmp/app"
   expect_status 0
+}
+
+test_remove_keeps_a_tracked_file_with_the_marker_on_its_first_line() {
+  make_app "$tmp/app"
+  local main="$tmp/app/Sources/App/main.swift"
+  { printf 'import InspectorKit // DEBUG INSPECTOR\n'; git -C "$tmp/app" show HEAD:Sources/App/main.swift; } >"$main.new"
+  mv "$main.new" "$main"
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_error INTEGRATION_LEFT
+  expect_contains 'Sources/App/main.swift:1' "$err"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  [[ -f "$main" ]] || fail "tracked main.swift was deleted"
+  expect_contains '"deleted":[]' "$out"
+  expect_contains 'Sources/App/main.swift:1' "$out"
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_status 0
+  expect_clean_tree "$tmp/app"
+}
+
+test_remove_deletes_an_untracked_file_with_the_marker_on_its_first_line() {
+  make_app "$tmp/app"
+  printf '// DEBUG INSPECTOR\nimport InspectorKit\n' >"$tmp/app/Sources/App/Extra.swift"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  [[ ! -e "$tmp/app/Sources/App/Extra.swift" ]] || fail "untracked Extra.swift left behind"
+  expect_contains '"deleted":["Sources/App/Extra.swift"]' "$out"
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_status 0
+}
+
+# mark_first_line <file>: a marked line on top of a tracked file, as an entry point gets it when the
+# call needs an import first.
+mark_first_line() {
+  printf '%s\n%s\n' 'import InspectorKit // DEBUG INSPECTOR' "$(cat "$1")" >"$1"
+}
+
+test_remove_keeps_a_tracked_file_whose_first_line_is_marked() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_status 0
+  mark_first_line "$tmp/app/Sources/App/main.swift"
+  printf 'DebugInspector.start() // DEBUG INSPECTOR\n' >>"$tmp/app/Sources/App/main.swift"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  expect_contains '"deleted":["Sources/App/DebugInspector.swift"]' "$out"
+  expect_contains 'Sources/App/main.swift:1' "$out"
+  [[ -f "$tmp/app/Sources/App/main.swift" ]] || fail "main.swift was deleted"
+  expect_clean_tree "$tmp/app"
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_status 0
+}
+
+test_remove_keeps_a_tracked_file_whose_first_line_is_marked_without_a_record() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  mark_first_line "$tmp/app/Sources/App/main.swift"
+  rm -rf "$tmp/app/.inspector"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  [[ -f "$tmp/app/Sources/App/main.swift" ]] || fail "main.swift was deleted"
+  [[ ! -e "$tmp/app/Sources/App/DebugInspector.swift" ]] || fail "DebugInspector.swift left behind"
+  git -C "$tmp/app" diff --quiet HEAD -- Sources/App/main.swift ||
+    fail "main.swift still differs: $(git -C "$tmp/app" diff HEAD)"
+}
+
+test_round_trip_with_the_package_at_the_repo_root_given_as_dot() {
+  make_app "$tmp/app"
+  cd "$tmp/app" || return
+  run "$scripts/integrate.sh" . --into Sources/App --package . --package-target App
+  expect_status 0
+  run "$scripts/remove.sh" .
+  cd - >/dev/null || return
+  expect_status 0
+  expect_contains '"restored":["Package.swift"' "$out"
+  expect_clean_tree "$tmp/app"
 }
 
 test_remove_keeps_the_exclude_entry_while_another_worktree_is_integrated() {

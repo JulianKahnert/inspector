@@ -7,39 +7,22 @@
 # next to the patches and the copies it names. Reversing a patch undoes exactly what the edit added,
 # also the lines SwiftPM adds without a marker (`dependencies: [`, a comma). Without a record, or
 # when a file changed so its patch no longer applies, the markers are the fallback.
-
-# status_snapshot <root>: one sorted line per path `git status` lists: path, status, content hash.
-status_snapshot() {
-  local root="$1" entry path hash
-  while IFS= read -r -d '' entry; do
-    path="${entry:3}"
-    hash=-
-    [[ ! -f "$root/$path" ]] || hash="$(git -C "$root" hash-object --no-filters -- "$path")"
-    printf '%s\t%s\t%s\n' "$path" "${entry:0:2}" "$hash"
-  done < <(git -C "$root" status --porcelain=v1 -z --untracked-files=all --no-renames --ignore-submodules=all)
-}
-
-# unexpected_file <root>: where remove.sh notes the paths it changed outside the integration, for
-# --check; in the worktree's git directory, so removing `.inspector/` keeps it.
-unexpected_file() {
-  git -C "$1" rev-parse --path-format=absolute --git-path inspector-unexpected
-}
+#
+# A whole file goes only when git does not track it: integrate.sh creates files, it never takes
+# over a tracked one. A tracked file loses only its marked lines, whatever line they are on.
 
 # remove_integration <root>: undoes the integration in one repository and sets `removal_json`
-# to what it did, and `removal_unexpected` to the paths it changed outside the integration.
+# to what it did.
 remove_integration() {
   local root="$1"
   local state="$root/.inspector/integration"
   local record="$state/record"
-  local deleted=() restored=() lines=() notes=() touched=()
-  local kind path extra before
-  before="$(mktemp)"
-  status_snapshot "$root" | LC_ALL=C sort >"$before"
+  local deleted=() restored=() lines=() notes=()
+  local kind path extra
 
   # 1. Patches and copied files, as recorded.
   if [[ -f "$record" ]]; then
     while IFS=$'\t' read -r kind path extra; do
-      [[ -z "$path" ]] || touched+=("$path")
       case "$kind" in
         patch)
           if git -C "$root" apply -R --check "$state/$extra" 2>/dev/null; then
@@ -50,7 +33,10 @@ remove_integration() {
           fi
           ;;
         file)
-          if [[ -e "$root/$path" ]]; then
+          # A tracked file is never integrate.sh's: it only ever adds untracked ones.
+          if is_tracked "$root" "$path"; then
+            notes+=("$path is tracked by git; left it in place")
+          elif [[ -e "$root/$path" ]]; then
             rm -f "$root/$path"
             deleted+=("$path")
           fi
@@ -94,11 +80,11 @@ remove_integration() {
     [[ -f "$record" ]] && awk -F'\t' '$1 == "resolved" { print $2 }' "$record"
   } | sort -u)
 
-  # 3. Files that are integration as a whole: not in HEAD, the marker on their first line. A file
-  #    in HEAD only loses its marked lines, also when the first one is marked (a sorted import).
+  # 3. Files that are integration as a whole: untracked, with the marker on their first line. A
+  #    tracked file whose first line is marked (an app's entry point starting with a marked import,
+  #    a committed integration file) is never deleted; step 4 strips only its marked lines.
   while IFS= read -r file; do
-    git -C "$root" cat-file -e "HEAD:$file" 2>/dev/null && continue
-    if head -n 1 "$root/$file" | grep -q "$marker"; then
+    if ! is_tracked "$root" "$file" && head -n 1 "$root/$file" | grep -q "$marker"; then
       rm -f "$root/$file"
       deleted+=("$file")
     fi
@@ -108,7 +94,6 @@ remove_integration() {
   #    value, or before a single value it added to an existing array; both go with it.
   local number
   while IFS= read -r file; do
-    touched+=("$file")
     while IFS= read -r number; do
       lines+=("$file:$number")
     done < <(grep -n "$marker" "$root/$file" | cut -d: -f1)
@@ -133,23 +118,6 @@ remove_integration() {
 
   # 6. The session binding goes with the integration.
   rm -rf "$root/.inspector"
-
-  # 7. Every path whose git status changed has to be one the integration touched.
-  local after allowed
-  after="$(mktemp)"
-  allowed="$(mktemp)"
-  status_snapshot "$root" | LC_ALL=C sort >"$after"
-  printf '%s\n' ${deleted[@]+"${deleted[@]}"} ${restored[@]+"${restored[@]}"} ${touched[@]+"${touched[@]}"} |
-    sed '/^$/d' | LC_ALL=C sort -u >"$allowed"
-  removal_unexpected=()
-  while IFS= read -r path; do
-    removal_unexpected+=("$path")
-  done < <(LC_ALL=C comm -3 "$before" "$after" | sed 's/^\t//' | cut -f1 | LC_ALL=C sort -u |
-    grep -v '^\.inspector/' | LC_ALL=C comm -23 - "$allowed")
-  rm -f "$before" "$after" "$allowed"
-  if [[ ${#removal_unexpected[@]} -gt 0 ]]; then
-    printf '%s\n' "${removal_unexpected[@]}" >>"$(unexpected_file "$root")"
-  fi
 
   removal_json="{\"deleted\":$(json_strings ${deleted[@]+"${deleted[@]}"}),"
   removal_json+="\"lines\":$(json_strings ${lines[@]+"${lines[@]}"}),"

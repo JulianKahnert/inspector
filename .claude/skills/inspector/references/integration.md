@@ -72,6 +72,15 @@ When a screenshot later shows something the task needed and this state lacks, ad
 - **Say in the action path what an `int` payload means** when it isn't a row index:
   `featureList.open` takes an index, `featureDetail.tapMeterID` a meter id. The catalog lists both
   as `{"kind":"int"}`, so the name is the only hint a caller gets.
+- **A confirm action answers its alert only once the alert is on screen.** UIKit asserts and
+  aborts the app when an alert's state is cleared before its presentation committed, which a
+  confirm sent right after the action that opened it does. So the action first checks that the
+  state holds that confirmation (else a `badRequest` naming it), then waits a bounded time (well
+  under the 5 s settle timeout) until the top presented view controller is a `UIAlertController`
+  with no transition running, and fails naming the alert when it never appears. Put that wait in
+  one helper every confirm action calls, and report the open confirmation and whether it is ready
+  in the screen's state (`confirmation`, `isConfirmationReady`), so a caller can `--until` on it.
+  Then no route needs a pause before confirming.
 - **A close action for every sheet and pushed screen** you register (`featureDetail.close`). The
   inspector has no generic back or dismiss; a sheet without one can only be closed by a
   `tap --target` on its close or cancel button, which needs the simulator.
@@ -193,16 +202,11 @@ directly below it, such as the checkouts in a workspace.
 
 `remove.sh` reverses the recorded patches, which also drops the lines SwiftPM added without a
 marker (`dependencies: [`, a comma), restores each `Package.resolved` that gained only
-InspectorKit's pins, deletes the files `integrate.sh` created, removes every marked line left,
-and removes `.inspector/` and its exclude entry (`init` writes the same marked entry), unless
-another worktree of the repository still has a `.inspector/`. A file changed so its patch no longer applies
-loses only its marked lines, and the answer's `notes` says which. Without a record it deletes a
-file only when HEAD lacks it and its first line carries the marker; a file in HEAD only ever loses
-its marked lines, also when the first line is one, such as an `import` that sorts first.
-
-Afterwards it compares `git status` with how it was before: a path it changed that is neither
-recorded, nor deleted as above, nor holding a marked line ends it in `UNEXPECTED_CHANGE`, with the
-paths in `detail.unexpected`, and stays on record for `--check`.
+InspectorKit's pins, deletes every untracked file whose first line carries the marker, removes
+every marked line left (in a file git tracks only those lines go, even on its first line), removes
+`.inspector/` and its exclude entry (`init` writes the same marked entry), unless another worktree
+of the repository still has a `.inspector/`. A file changed so its patch no longer applies loses
+only its marked lines, and the answer's `notes` says which.
 
 `--check` exits 1 with `INTEGRATION_LEFT` while any of these is left, and `detail` lists each with
 `kind`, `repo` and `where`:
@@ -213,13 +217,7 @@ paths in `detail.unexpected`, and stays on record for `--check`.
 | `diff` | `InspectorKit` on a line added since the base branch, or in such an untracked file |
 | `tracked` | a file under `.inspector/` in the index |
 | `resolved` | a `Package.resolved` that gained a pin InspectorKit's package brings |
-
-With none of those but one of these it exits 1 with `UNEXPECTED_CHANGE`:
-
-| `kind` | What |
-|---|---|
-| `deleted` | a tracked file deleted in the working tree and not staged; no integration step deletes one, so `git rm` a deletion you meant |
-| `unexpected` | a path `remove.sh` changed outside the integration that still differs from the index |
+| `deleted` | a tracked file gone from the working tree but still in the index; `git restore <path>` brings it back, `git rm <path>` keeps a deletion you meant |
 
 The base is `--base <ref>`, else the default branch of the current branch's remote
 (`refs/remotes/<remote>/HEAD`), else `origin`'s. Without one it fails with `BASE_NOT_FOUND`;
