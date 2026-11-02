@@ -10,7 +10,9 @@ struct CaptureCommand: InspectorCommand {
     discussion: """
       A target is a control on the screen, with its `type`, `identifier`, `label`, `placeholder` \
       and `value` where the hierarchy names them, and the `hitPoint` a tap goes to, as [x, y] in \
-      points. The paths go to `run.json` as `lastScreenshot` and `lastHierarchy`. Needs \
+      points. `screenshot` is a copy at most 1000 pixels on its longest edge; `screenshotFull`, \
+      the full-resolution original, is for a human. The paths go to `run.json` as \
+      `lastScreenshot`, `lastScreenshotFull` and `lastHierarchy`. Needs \
       `.inspector/` with a session, which `inspector init` starts.
       """)
 
@@ -19,7 +21,8 @@ struct CaptureCommand: InspectorCommand {
     let capture = try await environment.withXcode { xcode throws(InspectorError) in
       try await session.capture(on: xcode, in: environment)
     }
-    Artifacts(hierarchy: capture.hierarchy, screenshot: capture.screenshot).record(in: session.folder)
+    Artifacts(hierarchy: capture.hierarchy, screenshot: capture.screenshot, screenshotFull: capture.screenshotFull)
+      .record(in: session.folder)
     return capture
   }
 }

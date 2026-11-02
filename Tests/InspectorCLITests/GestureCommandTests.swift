@@ -34,7 +34,9 @@ struct GestureCommandTests {
     try await Sandbox.run { sandbox in
       try sandbox.makeDirectory("app/.git")
       try sandbox.write("app/.inspector/config.json", Self.config)
-      try sandbox.write("app/.inspector/run.json", #"{"lastHierarchy":"/tmp/old-hierarchy.txt","note":"kept"}"#)
+      try sandbox.write(
+        "app/.inspector/run.json",
+        #"{"lastHierarchy":"/tmp/old-hierarchy.txt","lastScreenshotFull":"/tmp/old-screenshot.png","note":"kept"}"#)
       let xcode = FakeXcode { _ in .text(Self.artifacts) }
 
       _ = await InspectorCLI.outcome(of: ["tap", "1", "2"], in: sandbox.environment(xcode.environment(), in: "app"))
@@ -42,8 +44,29 @@ struct GestureCommandTests {
       let run = try sandbox.json("app/.inspector/run.json")
       #expect(run["lastHierarchy"] == "/tmp/g-hierarchy.txt")
       #expect(run["lastScreenshot"] == "/tmp/g-screenshot.png")
+      #expect(run["lastScreenshotFull"] == nil)
       #expect(run["lastStep"]?["arguments"] == .array(["tap", "1", "2"]))
       #expect(run["note"] == "kept")
+    }
+  }
+
+  @Test("a gesture records the small copy of a large screenshot as lastScreenshot, the original as lastScreenshotFull")
+  func smallCopy() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let screenshot = sandbox.url("g-screenshot.png").path
+      try TestImage.writePNG(width: 2622, height: 1206, to: URL(filePath: screenshot))
+      let escaped = screenshot.replacing("/", with: #"\/"#)
+      let xcode = FakeXcode { _ in .text(#"{"applicationState":"Running","screenshotPath":"\#(escaped)"}"#) }
+
+      _ = await InspectorCLI.outcome(of: ["tap", "1", "2"], in: sandbox.environment(xcode.environment(), in: "app"))
+
+      let small = sandbox.url("g-screenshot-small.png").path
+      let run = try sandbox.json("app/.inspector/run.json")
+      #expect(run["lastScreenshot"] == .string(small))
+      #expect(run["lastScreenshotFull"] == .string(screenshot))
+      #expect(TestImage.size(at: small)?.max() == 1000)
     }
   }
 

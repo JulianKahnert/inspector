@@ -66,6 +66,13 @@ changes nothing.
 | `TARGET_AMBIGUOUS` | Targets at several points have it; `detail` lists them | Agent | Name the identifier, or tap the right one's `hitPoint` coordinates |
 | `BUILD_FAILED` | From `inspector.sh`: the inspector checkout does not build; the compiler output precedes the line, `detail` is the checkout | Agent | Your own change in that checkout: fix it. Otherwise report it as **human**: the inspector checkout is mid-change |
 
+## screenshot.sh
+
+| `code` | Who | Next step |
+|---|---|---|
+| `IMAGE_UNREADABLE` | Agent | `detail` is the path: pass a file that exists and is an image |
+| `SHEET_FAILED` | Agent | The Swift output precedes the line; read the small copies one by one instead |
+
 ## Integration scripts
 
 `integrate.sh` and `remove.sh` answer like the CLI. `add-to-package.sh` prints plain text on

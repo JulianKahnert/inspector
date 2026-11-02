@@ -167,7 +167,7 @@ $ cat .inspector/run.json
 ```
 
 - **`config.json`** binds the calls to an app, a simulator and an Xcode session: `app`, `instance`, `bundleId`, `udid`, `session`, `workspace`, `scheme`, `logSubsystem`, `writtenAt`. Only `inspector init` writes it; `instance` is the default for `--app`, and `--app` wins.
-- **`run.json`** holds what the last calls did: `lastStep` with the command, its arguments and when it started, and after a `capture` or gesture `lastHierarchy` and `lastScreenshot`. Each command replaces only its own fields.
+- **`run.json`** holds what the last calls did: `lastStep` with the command, its arguments and when it started, and after a `capture` or gesture `lastHierarchy`, `lastScreenshot` and, when that is a small copy, `lastScreenshotFull`. Each command replaces only its own fields.
 - **`.env`** holds `NAME=value` lines. `send` fills each `${NAME}` in its payload from there, `type` in its text, and fails with `ENV_MISSING` before sending when a name has no value; `${NAME}` without a folder fails with `NO_CONFIG`, whose `detail` is where the folder was expected.
 - **Masking**: A value filled in from `.env` shows as `${NAME}` in the answer, in an error and in `run.json`, wherever it appears, also where the state holds it for another reason; a number equal to it becomes the string `"${NAME}"`. Nothing else is masked, whatever its key is called.
 - **Git**: Never commit the folder. List `.inspector/` in `.gitignore` when the integration stays in the repository, or in `.git/info/exclude` when it is added only for a debugging session. `inspector init` adds the exclude entry itself when nothing ignores the folder yet.
@@ -185,7 +185,7 @@ $ scripts/inspector.sh end
 {"session":"inspector-RoommateAlbert-20260101-132548","xcode":{"userMessage":"Session stopped"}}
 ```
 
-`inspector capture` captures the simulator's screen in the same session and answers with the paths of the screenshot and the hierarchy Xcode wrote, plus `targets`: the controls on the screen with their `type`, `identifier`, `label`, `placeholder` and `value` where the hierarchy names them, and the `hitPoint` a tap goes to, as `[x, y]` in points. An agent reads `targets`, about 1 KB for a busy screen, instead of the 5 to 25 KB hierarchy; a typed field value shows up there even when the app's state does not hold it. The paths also go to `run.json` as `lastHierarchy` and `lastScreenshot`.
+`inspector capture` captures the simulator's screen in the same session and answers with the paths of the screenshot and the hierarchy Xcode wrote, plus `targets`: the controls on the screen with their `type`, `identifier`, `label`, `placeholder` and `value` where the hierarchy names them, and the `hitPoint` a tap goes to, as `[x, y]` in points. An agent reads `targets`, about 1 KB for a busy screen, instead of the 5 to 25 KB hierarchy; a typed field value shows up there even when the app's state does not hold it. The paths also go to `run.json` as `lastHierarchy` and `lastScreenshot`. A screenshot larger than 1000 pixels on its longest edge, as every simulator's is, is answered as a small copy beside it, `<name>-small.png`, and the original Xcode wrote as `screenshotFull` (`lastScreenshotFull`): an agent reads the copy at a fraction of the tokens, a human opens the original.
 
 ```console
 $ scripts/inspector.sh capture | jq -c '.targets[] | select(.label == "Stand eintragen")'
@@ -238,6 +238,7 @@ Its `scripts/inspector.sh` follows the link back to this checkout, builds the CL
 
    ```sh
    xcrun simctl io booted screenshot screen.png    # iOS simulator; a UDID instead of `booted` picks one of several
+   .claude/skills/inspector/scripts/screenshot.sh screen.png    # the small copy to read, screen-small.png
    ```
 
    If the screenshot showed something the task needed, add it to that screen's registered state, so the next run reads it as JSON instead.

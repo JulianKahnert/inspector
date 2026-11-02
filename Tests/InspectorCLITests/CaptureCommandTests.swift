@@ -36,6 +36,55 @@ struct CaptureCommandTests {
     }
   }
 
+  @Test("a screenshot larger than 1000 pixels answers a small copy beside it, and the original as screenshotFull")
+  func smallCopy() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      try sandbox.write("artifacts/s-hierarchy.txt", try Self.fixture("enter-reading-hierarchy"))
+      let hierarchy = sandbox.url("artifacts/s-hierarchy.txt").path
+      let screenshot = sandbox.url("artifacts/s-screenshot.png").path
+      try TestImage.writePNG(width: 1206, height: 2622, to: URL(filePath: screenshot))
+      let xcode = FakeXcode { _ in .text(Self.artifacts(hierarchy: hierarchy, screenshot: screenshot)) }
+
+      let outcome = await InspectorCLI.outcome(of: ["capture"], in: sandbox.environment(xcode.environment(), in: "app"))
+
+      let small = sandbox.url("artifacts/s-screenshot-small.png").path
+      let answer = try JSONDecoder().decode(JSONValue.self, from: Data(outcome.stdout.utf8))
+      #expect(answer["screenshot"] == .string(small))
+      #expect(answer["screenshotFull"] == .string(screenshot))
+      #expect(TestImage.size(at: small)?.max() == 1000)
+      #expect(TestImage.size(at: screenshot) == [1206, 2622])
+      let run = try sandbox.json("app/.inspector/run.json")
+      #expect(run["lastScreenshot"] == .string(small))
+      #expect(run["lastScreenshotFull"] == .string(screenshot))
+    }
+  }
+
+  @Test("a screenshot of at most 1000 pixels is answered as it is, without a copy")
+  func smallScreenshot() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      try sandbox.write("app/.inspector/run.json", #"{"lastScreenshotFull":"/tmp/old-screenshot.png"}"#)
+      try sandbox.write("artifacts/s-hierarchy.txt", try Self.fixture("enter-reading-hierarchy"))
+      let hierarchy = sandbox.url("artifacts/s-hierarchy.txt").path
+      let screenshot = sandbox.url("artifacts/s-screenshot.png").path
+      try TestImage.writePNG(width: 460, height: 1000, to: URL(filePath: screenshot))
+      let xcode = FakeXcode { _ in .text(Self.artifacts(hierarchy: hierarchy, screenshot: screenshot)) }
+
+      let outcome = await InspectorCLI.outcome(of: ["capture"], in: sandbox.environment(xcode.environment(), in: "app"))
+
+      let answer = try JSONDecoder().decode(JSONValue.self, from: Data(outcome.stdout.utf8))
+      #expect(answer["screenshot"] == .string(screenshot))
+      #expect(answer["screenshotFull"] == nil)
+      #expect(!FileManager.default.fileExists(atPath: sandbox.url("artifacts/s-screenshot-small.png").path))
+      let run = try sandbox.json("app/.inspector/run.json")
+      #expect(run["lastScreenshot"] == .string(screenshot))
+      #expect(run["lastScreenshotFull"] == nil)
+    }
+  }
+
   @Test(
     "a capture without a readable hierarchy fails with NO_HIERARCHY and Xcode's answer in detail",
     arguments: [
