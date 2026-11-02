@@ -72,6 +72,11 @@ Xcode keeps its approval, and passes the arguments through.
    (`jq -r .detail | jq`); `capture`'s `targets`; `scripts/logs.sh`, the app's errors since that
    step; the screenshot PNG at `capture`'s `screenshot` path, only when targets, state and logs
    leave the question open. The raw hierarchy file stays unread.
+   `screenshot` is a copy at most 1000 pixels on its longest edge; `screenshotFull` (and
+   `lastScreenshotFull` in `run.json`) is the full-resolution original for the human, never
+   opened by you. A PNG from elsewhere (`xcrun simctl io <udid> screenshot`) goes through
+   `scripts/screenshot.sh <png>` first; to compare several screens, read one
+   `scripts/screenshot.sh --sheet <out.png> <png…>` instead of each PNG.
 8. **Report** the route as the calls in order, the state values that answer the task, which
    conditions held, whether a screenshot was needed and which registration you added so the next
    run needs none, and what you could not reach.
@@ -133,6 +138,9 @@ Every sheet and pushed screen gets a close action. Details, rules and the templa
   `null` nor `false`.
 - `scripts/logs.sh [--all] [--since <seconds>]`: after a failed step, the app's error and fault
   log entries since that step.
+- `scripts/screenshot.sh [--sheet <out.png>] <png…>`: the small copy of each PNG, beside it as
+  `<name>-small.png`, or one contact sheet of all of them; either at most 1000 pixels on its
+  longest edge. Read only what it answers as `screenshot` or `sheet`.
 - `scripts/integrate.sh <repo> --from <store dir> | --into <target path>`: adds an ephemeral
   integration.
 - `scripts/remove.sh [<repo…>]`: takes it out again; `--check [--base <ref>]` exits 1 while

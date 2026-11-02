@@ -40,6 +40,7 @@ swift run inspector wait '{"counter":42}' --timeout 1
 bash .claude/skills/inspector/tests/logs-test.sh   # the skill's logs.sh against a fake xcrun
 bash .claude/skills/inspector/tests/integrate-remove-test.sh  # integrate.sh/remove.sh on throwaway repos; --no-build
 bash .claude/skills/inspector/tests/inspector-sh-test.sh      # inspector.sh's rebuild and signing, through a symlink
+bash .claude/skills/inspector/tests/screenshot-test.sh        # screenshot.sh's small copies and contact sheet
 ```
 
 Commands through Xcode (`capture`, `end`) need the signed binary: run them through

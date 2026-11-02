@@ -29,7 +29,7 @@ before the app.
 | `send <path> [json] --until <match> [--timeout s]` | Runs the action, then answers once the state contains the match |
 | `wait <match> [--timeout s]` | The whole state document, once it contains the match |
 | `init [--warm] [--reset] [--workspace path] [--udid udid]` | `{"config","hello","state"}`: builds, installs and starts the app through Xcode, writes `.inspector/config.json` and reads the first observation (see *Init* below) |
-| `capture` | `{"screenshot","hierarchy","targets"}`: captures the simulator's screen in the session in `.inspector/config.json`. `targets` lists the controls as `{type, identifier?, label?, placeholder?, value?, hitPoint: [x, y]}`; `value` holds a field's typed text. Find a tap point with `jq '.targets[] \| select(.label == "Sichern")'` |
+| `capture` | `{"screenshot","screenshotFull"?,"hierarchy","targets"}`: captures the simulator's screen in the session in `.inspector/config.json`. `targets` lists the controls as `{type, identifier?, label?, placeholder?, value?, hitPoint: [x, y]}`; `value` holds a field's typed text. `screenshot` is at most 1000 pixels on its longest edge; `screenshotFull`, the original it was scaled from, is for a human. Find a tap point with `jq '.targets[] \| select(.label == "Sichern")'` |
 | `tap <x> <y>`, `tap --target <name>` | `{"gesture","target"?}`: taps a point, or the `hitPoint` of the one target whose identifier or label is the name (`TARGET_NOT_FOUND` / `TARGET_AMBIGUOUS` list the targets in `detail`). Simulator only |
 | `swipe <x1> <y1> <x2> <y2> [s]` | `{"gesture"}`: drags from one point to the other. Simulator only |
 | `type <text>` | `{"gesture"}`: types into the focused field, after its text; `${NAME}` comes from `.inspector/.env`, `\u{0008}` is backspace. Simulator only |
@@ -133,6 +133,13 @@ on the screen; every gesture also leaves its `lastScreenshot` and `lastHierarchy
 `.inspector/run.json`. Read `targets` (about 1 KB) to find a control or a typed value; open the
 PNG at `screenshot` only when targets, state and logs leave the question open; leave the
 hierarchy file (5 to 25 KB of text) unread. All of it exists only in the simulator, after `init`.
+
+A screenshot larger than 1000 pixels on its longest edge (every simulator's is) gets a small copy
+beside it, `<name>-small.png`: `screenshot` and `lastScreenshot` name that copy, `screenshotFull`
+and `lastScreenshotFull` the original Xcode wrote. Open only the copy; the original is for a
+human. `scripts/screenshot.sh <png…>` makes the same copy of a PNG from elsewhere, and
+`scripts/screenshot.sh --sheet <out.png> <png…>` one contact sheet of several, in argument order,
+for comparing screens in one read.
 
 ## Software keyboard and orientation
 
