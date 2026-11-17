@@ -124,6 +124,12 @@ keys. A repository keeps it in one of two modes:
   run `scripts/remove.sh <repo…>` and `scripts/remove.sh --check <repo…>`. Both scripts run
   without asking. A registration a loop needed goes into the store's copy too, so the next
   workspace starts with it.
+- **The store's copy drifts**: it was written against another checkout, whose code or pinned
+  package versions can have a type or case this one lacks. Pass `--check-build` with every
+  `--from`: it builds the app scheme once (`--scheme`, `--workspace`, `--destination` when it
+  cannot tell) and answers `INTEGRATION_STALE` with the failing `files` and unresolved `symbols`,
+  the integration left in place. Adapt the repository's copy to this checkout, build, then copy
+  it back to `detail.store`.
 
 A screen's state mirrors what the screen shows, in the screen's unit: a value the app stores
 scaled (a meter reading in thousandths) is registered as displayed, or its key names the unit.
@@ -141,8 +147,8 @@ Every sheet and pushed screen gets a close action. Details, rules and the templa
 - `scripts/screenshot.sh [--sheet <out.png>] <png…>`: the small copy of each PNG, beside it as
   `<name>-small.png`, or one contact sheet of all of them; either at most 1000 pixels on its
   longest edge. Read only what it answers as `screenshot` or `sheet`.
-- `scripts/integrate.sh <repo> --from <store dir> | --into <target path>`: adds an ephemeral
-  integration.
+- `scripts/integrate.sh <repo> --from <store dir> | --into <target path> [--check-build]`: adds
+  an ephemeral integration; `--check-build` then proves it compiles against this checkout.
 - `scripts/remove.sh [<repo…>]`: takes it out again; `--check [--base <ref>]` exits 1 while
   anything of it is left.
 - `scripts/add-to-package.sh <package dir> <target> [--ios-only] [--copy-template]`: adds

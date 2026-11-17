@@ -81,6 +81,10 @@ stderr, exits 1 on failure with the manifest restored, and 2 on a usage error.
 | `code` | Who | Next step |
 |---|---|---|
 | `ALREADY_INTEGRATED` | Agent | `scripts/remove.sh <repo>` first |
+| `INTEGRATION_STALE` | Agent | From `--check-build`: the integration stays in place. Make `detail.files` compile against this checkout: use the types and cases it has instead of each name in `detail.symbols` (search the checkout and the pinned packages), build, then copy the file back to `detail.store` |
+| `INSPECTORKIT_UNLINKED` | Agent | From `--check-build`: the dependency reaches another target than the one compiling the file; `scripts/remove.sh`, then `integrate.sh` with `--package <dir> --package-target <name>` of a package the app target links |
+| `CHECK_BUILD_FAILED` | Agent | From `--check-build`: the build failed outside the integration (`detail.errors`, full output in `detail.log`); the integration stays in place. Fix or report that failure; it is not the integration's |
+| `BUILD_UNKNOWN` | Agent | From `--check-build`, before any change: pass `--workspace <path>` or `--scheme <name>` (`xcodebuild -list`), one from `detail` |
 | `STORE_INVALID` | Agent | Keep exactly one `DebugInspector.swift` below the store folder, at its target path |
 | `TARGET_DIR_MISSING`, `TARGET_UNKNOWN` | Agent | Fix the store's path, or pass `--package-target` |
 | `NEEDS_PROJECT_DEPENDENCY` | Agent, else human | Pass `--package <local wrapper package> --package-target <name>`; without such a package a human adds it in Xcode (File > Add Package Dependencies > Add Local, product InspectorKit), then `integrate.sh` again |

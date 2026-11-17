@@ -461,6 +461,121 @@ test_round_trip_builds_against_this_package() {
   expect_clean_tree "$tmp/app"
 }
 
+# MARK: - integrate.sh --check-build
+
+# fake_swift <exit code> <output lines…>: a `swift` on PATH whose `build` prints the lines, each
+# `%PWD%` replaced by the directory it runs in, and exits with the code; anything else goes to the
+# real swift, which add-to-package.sh needs. Sets $fake_path.
+fake_swift() {
+  local code="$1" real
+  shift
+  real="$(command -v swift)"
+  mkdir -p "$tmp/fakebin"
+  printf '%s\n' "$@" >"$tmp/fakebin/build-output"
+  cat >"$tmp/fakebin/swift" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1" == build ]]; then
+  sed "s|%PWD%|\$PWD|g" "$tmp/fakebin/build-output"
+  exit $code
+fi
+exec "$real" "\$@"
+EOF
+  chmod +x "$tmp/fakebin/swift"
+  fake_path="$tmp/fakebin:$PATH"
+}
+
+test_check_build_names_the_stale_file_and_its_unresolved_symbols() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  fake_swift 1 \
+    "%PWD%/Sources/App/DebugInspector.swift:7:20: "$'\e[1;31m'"error: "$'\e[1;39m'"cannot find 'LoadItemsUseCase' in scope"$'\e[0;0m' \
+    "%PWD%/Sources/App/DebugInspector.swift:9:31: error: type 'ItemsState' has no member 'loadingMore'" \
+    "%PWD%/Sources/App/DebugInspector.swift:7:20: error: cannot find 'LoadItemsUseCase' in scope" \
+    "error: fatalError"
+  run env PATH="$fake_path" "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app" --check-build
+  expect_error INTEGRATION_STALE
+  expect_contains '"files":["Sources/App/DebugInspector.swift"]' "$err"
+  expect_contains '"symbols":["LoadItemsUseCase","ItemsState.loadingMore"]' "$err"
+  expect_contains '"errors":["Sources/App/DebugInspector.swift:7:20: cannot find' "$err"
+  expect_contains 'copy it back to ' "$err"
+  expect_contains '/store/app/Sources/App/DebugInspector.swift","symbols"' "$err"
+  [[ -f "$tmp/app/Sources/App/DebugInspector.swift" ]] || fail "the integration was not left in place"
+  [[ -s "$tmp/app/.inspector/integration/build.log" ]] || fail "no build log"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  expect_clean_tree "$tmp/app"
+}
+
+test_check_build_tells_a_broken_checkout_from_a_stale_integration() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  fake_swift 1 "%PWD%/Sources/App/main.swift:1:1: error: expressions are not allowed at the top level"
+  run env PATH="$fake_path" "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app" --check-build
+  expect_error CHECK_BUILD_FAILED
+  expect_contains 'Sources/App/main.swift:1:1: expressions' "$err"
+}
+
+test_check_build_answers_the_build_when_it_passes() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  fake_swift 0 "Build complete!"
+  run env PATH="$fake_path" "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app" --check-build
+  expect_status 0
+  expect_contains '"build":{"command":"swift build --target App","log":".inspector/integration/build.log"' "$out"
+}
+
+test_integrate_answers_no_build_without_the_flag() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_status 0
+  expect_contains '"build":null' "$out"
+}
+
+test_check_build_options_need_the_flag() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app" --scheme App
+  expect_status 64
+  expect_contains 'only go with --check-build' "$err"
+}
+
+test_check_build_stops_before_any_change_when_the_workspace_is_unclear() {
+  make_app "$tmp/app"
+  mkdir -p "$tmp/app/One.xcworkspace" "$tmp/app/Two.xcworkspace"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app" --check-build
+  expect_error BUILD_UNKNOWN
+  expect_contains '"detail":["One.xcworkspace","Two.xcworkspace"]' "$err"
+  [[ ! -e "$tmp/app/Sources/App/DebugInspector.swift" ]] || fail "integrate.sh changed the repository"
+  [[ ! -e "$tmp/app/.inspector" ]] || fail ".inspector/ left behind"
+}
+
+test_check_build_builds_and_catches_a_stale_store_file() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  cat >"$tmp/store/app/Sources/App/DebugInspector.swift" <<'EOF'
+// DEBUG INSPECTOR — written against a newer checkout of the test app.
+import InspectorKit
+
+enum DebugInspector {
+    static func start() {
+        let useCase = LoadItemsUseCase()
+        Inspector.shared.state("items") { useCase.isLoading }
+    }
+}
+EOF
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app" --check-build
+  expect_error INTEGRATION_STALE
+  expect_contains '"files":["Sources/App/DebugInspector.swift"]' "$err"
+  expect_contains '"symbols":["LoadItemsUseCase"]' "$err"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  run "$scripts/remove.sh" --check "$tmp/app"
+  expect_status 0
+  expect_clean_tree "$tmp/app"
+}
+
 test_remove_runs_over_every_repo_below_the_workspace_root() {
   mkdir "$tmp/workspace"
   make_app "$tmp/workspace/one"
