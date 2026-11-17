@@ -183,6 +183,30 @@ It records each edit as a patch in `.inspector/integration/`, and a copy of ever
 `Package.resolved`. Any failure undoes everything done so far. The one thing left to the agent is
 the call line in the app's entry point (step 3 above).
 
+**`--check-build`** then builds once and proves the integration compiles against this checkout. A
+stored `DebugInspector.swift` was written against some other checkout: a use case, a state enum or
+a case it names can be missing from this one's code or from the package versions its
+`Package.resolved` pins, and the first build then fails only inside that file. Compiling one file
+needs every module it imports built, so the check is a real build: `xcodebuild … build` of the one
+workspace (else the one project) with the shared scheme named like it, or `swift build --target
+<target>` for a SwiftPM app. Its cost is one build of the app; it runs in the default DerivedData,
+so `inspector init` afterwards only builds what changed. Options: `--scheme <name>`, `--workspace
+<path>`, `--destination <spec>` (default `generic/platform=iOS Simulator`; `platform=macOS` for a
+Mac app). The output goes to `.inspector/integration/build.log`, and the answer's `build` names the
+command and its seconds (`null` without the flag).
+
+A failed check leaves the integration in place, unlike any other failure, so the copy in the
+repository can be fixed and built:
+
+| `code` | What failed | `detail` |
+|---|---|---|
+| `INTEGRATION_STALE` | the integration's files | `files`, `errors` (`path:line:col: message`), `symbols` (each unresolved `Name` or `Type.member`), `store` (the store file to copy the fix back to), `log` |
+| `INSPECTORKIT_UNLINKED` | `import InspectorKit`: the dependency went to another target | as above |
+| `CHECK_BUILD_FAILED` | only other files: the checkout itself does not build | `errors` (the first ten), `log` |
+
+The check runs before the call line exists; that line only references `DebugInspector`, so it
+adds nothing the check could miss.
+
 **An Xcode app target.** A target with no `Package.swift` above it belongs to an Xcode project.
 `integrate.sh` doesn't edit a `.pbxproj`, so it either goes through a local package the app
 already links (`--package <dir> --package-target <name>`; the app target then imports InspectorKit

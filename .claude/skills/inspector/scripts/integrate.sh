@@ -11,8 +11,16 @@
 #   --package <dir>          add InspectorKit to this local package instead of the manifest above
 #   --package-target <name>  the target in that package (default: from the Sources/<name> path)
 #   --ios-only               link InspectorKit on iOS only
+#   --check-build            then build, to prove the integration compiles against this checkout
+#                            and the package versions it pins; a stored file can be older or newer
+#                            than the checkout's code. Costs one build of the app scheme.
+#   --scheme <name>          the scheme to build (default: the one shared scheme, or the one named
+#                            like the workspace or project)
+#   --workspace <path>       the .xcworkspace or .xcodeproj to build, when the repository has several
+#   --destination <spec>     xcodebuild's -destination (default: generic/platform=iOS Simulator)
 # Paths are relative to the repository. Answer: one JSON document on stdout. Failure: one JSON
-# line with `code` on stderr, exit 1, and nothing left changed. Usage error: exit 64.
+# line with `code` on stderr, exit 1, and nothing left changed; a failed --check-build is the
+# exception and leaves the integration in place, for remove.sh. Usage error: exit 64.
 set -euo pipefail
 scripts_dir="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=lib/common.sh
@@ -21,7 +29,8 @@ source "$scripts_dir/lib/common.sh"
 source "$scripts_dir/lib/removal.sh"
 
 usage='Usage: integrate.sh <repo dir> --from <store dir> [--plist <path>] [--package <dir>] [--package-target <name>] [--ios-only]
-       integrate.sh <repo dir> --into <target path> [--plist <path>] [--package <dir>] [--package-target <name>] [--ios-only]'
+                      [--check-build [--scheme <name>] [--workspace <path>] [--destination <spec>]]
+       integrate.sh <repo dir> --into <target path> [same options]'
 
 repo_dir=""
 from=""
@@ -30,9 +39,13 @@ plist_option=""
 package_option=""
 package_target=""
 ios_only=0
+check_build=0
+scheme_option=""
+workspace_option=""
+destination_option=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --from | --into | --plist | --package | --package-target)
+    --from | --into | --plist | --package | --package-target | --scheme | --workspace | --destination)
       [[ $# -ge 2 ]] || usage_error "$1 needs a value"
       case "$1" in
         --from) from="$2" ;;
@@ -40,10 +53,14 @@ while [[ $# -gt 0 ]]; do
         --plist) plist_option="$2" ;;
         --package) package_option="$2" ;;
         --package-target) package_target="$2" ;;
+        --scheme) scheme_option="$2" ;;
+        --workspace) workspace_option="$2" ;;
+        --destination) destination_option="$2" ;;
       esac
       shift
       ;;
     --ios-only) ios_only=1 ;;
+    --check-build) check_build=1 ;;
     -h | --help)
       printf '%s\n' "$usage"
       exit 0
@@ -60,6 +77,8 @@ done
 [[ -n "$from" || -n "$into" ]] || usage_error "pass --from <store dir>, or --into <target path> for the template"
 [[ -z "$from" || -z "$into" ]] || usage_error "--from and --into exclude each other"
 [[ -z "$package_option" || -n "$package_target" ]] || usage_error "--package needs --package-target"
+[[ $check_build -eq 1 || -z "$scheme_option$workspace_option$destination_option" ]] ||
+  usage_error "--scheme, --workspace and --destination only go with --check-build"
 
 root="$(require_app_repo "$repo_dir")" || exit 1
 state="$root/.inspector/integration"
@@ -72,6 +91,8 @@ repo_path() {
   [[ "$path" != /* && "/$path/" != */../* ]] || usage_error "$1 has to be a path inside the repository"
   printf '%s\n' "$path"
 }
+
+json_or_null() { if [[ -n "$1" ]]; then json_str "$1"; else printf 'null'; fi; }
 
 # MARK: - Plan: work out every change before making the first one
 
@@ -147,6 +168,83 @@ if [[ -n "$plist_option" ]]; then
   [[ -f "$root/$plist" ]] || fail PLIST_NOT_FOUND "no file $plist" "$(json_str "$plist")"
 elif [[ -f "$target_dir/Info.plist" ]]; then
   plist="$target_path/Info.plist"
+fi
+
+# The build for --check-build: xcodebuild on the one workspace, else the one project (the lookup
+# `inspector init` does), else SwiftPM on the package around the target.
+build_dir=""
+build_command=()
+if [[ $check_build -eq 1 ]]; then
+  # build_unknown <message> [names…]: what to build is unclear; fail before changing anything.
+  build_unknown() {
+    local message="$1"
+    shift
+    fail BUILD_UNKNOWN "$message" "$(json_strings "$@")"
+  }
+  skip_dirs=(\( -name '.*' -o -name Pods -o -name Carthage -o -name DerivedData -o -name node_modules -o -name build \) -prune)
+  containers=()
+  if [[ -n "$workspace_option" ]]; then
+    container="$(repo_path "$workspace_option")"
+    [[ -d "$root/$container" && ("$container" == *.xcworkspace || "$container" == *.xcodeproj) ]] ||
+      build_unknown "no .xcworkspace or .xcodeproj at $workspace_option" "$workspace_option"
+    containers=("$container")
+  else
+    workspaces=()
+    projects=()
+    while IFS= read -r -d '' found; do
+      found="${found#"$root"/}"
+      if [[ "$found" == *.xcworkspace ]]; then workspaces+=("$found"); else projects+=("$found"); fi
+    done < <(find "$root" -mindepth 1 -maxdepth 4 "${skip_dirs[@]}" -o \
+      \( -name '*.xcworkspace' -o -name '*.xcodeproj' \) -type d -print0 -prune)
+    if [[ ${#workspaces[@]} -gt 0 ]]; then
+      containers=("${workspaces[@]}")
+    elif [[ ${#projects[@]} -gt 0 ]]; then
+      containers=("${projects[@]}")
+    fi
+    [[ ${#containers[@]} -le 1 ]] ||
+      build_unknown "several Xcode workspaces or projects in $root; pass --workspace <path>" "${containers[@]}"
+  fi
+  destination="${destination_option:-generic/platform=iOS Simulator}"
+  if [[ ${#containers[@]} -eq 1 ]]; then
+    container="${containers[0]}"
+    scheme="$scheme_option"
+    if [[ -z "$scheme" ]]; then
+      # The shared schemes in the repository; one Xcode generates without sharing it needs --scheme.
+      schemes=()
+      while IFS= read -r name; do
+        schemes+=("$name")
+      done < <(find "$root" -mindepth 1 -maxdepth 7 "${skip_dirs[@]}" -o \
+        -path '*/xcshareddata/xcschemes/*.xcscheme' -print | sed 's|.*/||; s|\.xcscheme$||' | sort -u)
+      base="$(basename "$container")"
+      base="${base%.*}"
+      if [[ ${#schemes[@]} -eq 1 ]]; then
+        scheme="${schemes[0]}"
+      else
+        for name in ${schemes[@]+"${schemes[@]}"}; do
+          [[ "$name" != "$base" ]] || scheme="$name"
+        done
+      fi
+      [[ -n "$scheme" ]] ||
+        build_unknown "cannot tell which scheme builds the app in $container; pass --scheme <name> (xcodebuild -list names them)" \
+          ${schemes[@]+"${schemes[@]}"}
+    fi
+    kind=-project
+    [[ "$container" != *.xcworkspace ]] || kind=-workspace
+    build_dir="$root"
+    build_command=(xcodebuild "$kind" "$container" -scheme "$scheme" -destination "$destination" build)
+  else
+    build_dir="${package_dir:-$root}"
+    [[ -f "$build_dir/Package.swift" ]] ||
+      build_unknown "no Xcode workspace, project or Package.swift to build in $root; pass --workspace <path>"
+    if [[ -n "$scheme_option" ]]; then
+      # A package that builds only for iOS: xcodebuild builds it for the destination.
+      build_command=(xcodebuild -scheme "$scheme_option" -destination "$destination" build)
+    elif [[ -n "$package_target" ]]; then
+      build_command=(swift build --target "$package_target")
+    else
+      build_command=(swift build)
+    fi
+  fi
 fi
 
 # MARK: - Apply, rolling everything back on any failure
@@ -256,14 +354,72 @@ if [[ -n "$env_file" ]]; then
 fi
 trap - ERR
 
+# 7. --check-build: build, and name what of the integration does not compile against this checkout.
+build_json="null"
+if [[ $check_build -eq 1 ]]; then
+  log=".inspector/integration/build.log"
+  command_text="${build_command[*]}"
+  started=$SECONDS
+  if (cd "$build_dir" && "${build_command[@]}") >"$root/$log" 2>&1; then
+    build_json="{\"command\":$(json_str "$command_text"),\"log\":$(json_str "$log"),\"seconds\":$((SECONDS - started))}"
+  else
+    # Every compiler error once, as `path:line:col: message`: without the colours swift build
+    # prints even into a file, and once although xcodebuild repeats them.
+    all_errors=()
+    while IFS= read -r line; do
+      all_errors+=("$line")
+    done < <(sed $'s/\x1b\\[[0-9;]*m//g' "$root/$log" | grep -E '^/.+:[0-9]+:[0-9]+: error: ' |
+      sed 's/: error: /: /' | awk '!seen[$0]++')
+    # The integration's own files: the one it copied, and the manifest it edited.
+    own=("$file_path")
+    [[ "$dependency" != *.swift ]] || own+=("$dependency")
+    errors=()
+    files=()
+    for line in ${all_errors[@]+"${all_errors[@]}"}; do
+      for path in "${own[@]}"; do
+        case "${line%%:*}" in
+          */"$path")
+            errors+=("$path:${line#*.swift:}")
+            [[ " ${files[*]-} " == *" $path "* ]] || files+=("$path")
+            ;;
+        esac
+      done
+    done
+    if [[ ${#errors[@]} -eq 0 ]]; then
+      first=()
+      if [[ ${#all_errors[@]} -gt 0 ]]; then first=("${all_errors[@]:0:10}"); else first=("$(tail -n 20 "$root/$log")"); fi
+      fail CHECK_BUILD_FAILED "the build failed, but not in the integration's files: this checkout does not build as it is, or its packages did not resolve. The integration stays in place; fix the build, or remove.sh. Output: $log" \
+        "{\"command\":$(json_str "$command_text"),\"errors\":$(json_strings ${first[@]+"${first[@]}"}),\"log\":$(json_str "$log")}"
+    fi
+    # The names the compiler could not resolve, as `Name` or `Type.member`.
+    symbols=()
+    while IFS= read -r symbol; do
+      symbols+=("$symbol")
+    done < <(printf '%s\n' "${errors[@]}" | perl -ne '
+      if (/type \x27([^\x27]+)\x27 has no member \x27([^\x27]+)\x27/) { print "$1.$2\n" }
+      elsif (/case \x27([^\x27]+)\x27 not found in type \x27([^\x27]+)\x27/) { print "$2.$1\n" }
+      elsif (/(?:cannot find|cannot find type|no such module|has no member|has no member named) \x27([^\x27]+)\x27/) { print "$1\n" }
+    ' | awk '!seen[$0]++')
+    detail="{\"command\":$(json_str "$command_text"),\"errors\":$(json_strings "${errors[@]}"),\"files\":$(json_strings "${files[@]}"),\"log\":$(json_str "$log"),\"store\":$(json_or_null "${from:+$source_file}"),\"symbols\":$(json_strings ${symbols[@]+"${symbols[@]}"})}"
+    names=""
+    [[ ${#symbols[@]} -eq 0 ]] || names=" (unresolved: $(printf '%s, ' "${symbols[@]}" | sed 's/, $//'))"
+    if printf '%s\n' "${errors[@]}" | grep -q "no such module 'InspectorKit'"; then
+      fail INSPECTORKIT_UNLINKED "${files[*]} cannot import InspectorKit: the dependency does not reach the target that builds it. Pass --package/--package-target for a package the app target links, or add InspectorKit in Xcode. The integration stays in place; remove.sh takes it out." "$detail"
+    elif [[ -n "$from" ]]; then
+      fail INTEGRATION_STALE "the stored integration does not compile against this checkout${names}: ${files[*]} uses code that this checkout or the package versions it pins lack, or has changed. The store's copy is stale for this checkout: adapt $file_path in the repository to what the checkout has, build again, then copy it back to ${source_file}. The integration stays in place; remove.sh takes it out." "$detail"
+    else
+      fail INTEGRATION_STALE "the integration does not compile against this checkout${names}: fill the template's placeholders in $file_path with what this checkout has, then build again. The integration stays in place; remove.sh takes it out." "$detail"
+    fi
+  fi
+fi
+
 notes=()
 [[ -z "${notes_dependency:-}" ]] || notes+=("$notes_dependency")
 [[ -n "$plist" ]] ||
   notes+=("no Info.plist in $target_path: an iOS app needs NSBonjourServices and NSLocalNetworkUsageDescription, pass --plist")
 
-json_or_null() { if [[ -n "$1" ]]; then json_str "$1"; else printf 'null'; fi; }
-printf '{"dependency":%s,"env":%s,"file":%s,"next":%s,"notes":%s,"plist":%s,"repo":%s,"target":%s}\n' \
-  "$(json_or_null "$dependency")" "$(json_or_null "$env_path")" "$(json_str "$file_path")" \
+printf '{"build":%s,"dependency":%s,"env":%s,"file":%s,"next":%s,"notes":%s,"plist":%s,"repo":%s,"target":%s}\n' \
+  "$build_json" "$(json_or_null "$dependency")" "$(json_or_null "$env_path")" "$(json_str "$file_path")" \
   "$(json_str "Call the integration from the app's entry point on one line that ends in // DEBUG INSPECTOR, then build. remove.sh takes everything out again.")" \
   "$(json_strings ${notes[@]+"${notes[@]}"})" "$(json_or_null "$plist")" "$(json_str "$root")" \
   "$(json_or_null "$package_target")"

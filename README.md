@@ -320,11 +320,11 @@ swift run inspector hello            # terminal 2
 swift run inspector send counter.set 42
 ```
 
-The skill's scripts have shell tests in `.claude/skills/inspector/tests/`. The one for `integrate.sh` and `remove.sh` builds throwaway git repositories in a temporary directory and, in one test, a SwiftPM app against this package:
+The skill's scripts have shell tests in `.claude/skills/inspector/tests/`. The one for `integrate.sh` and `remove.sh` builds throwaway git repositories in a temporary directory and, in two tests, a SwiftPM app against this package (one of them through `integrate.sh --check-build` with a stored integration that no longer compiles):
 
 ```sh
 bash .claude/skills/inspector/tests/integrate-remove-test.sh              # about 30 s
-bash .claude/skills/inspector/tests/integrate-remove-test.sh --no-build   # skips the build
+bash .claude/skills/inspector/tests/integrate-remove-test.sh --no-build   # skips the builds
 bash .claude/skills/inspector/tests/logs-test.sh                          # logs.sh against a fake xcrun
 bash .claude/skills/inspector/tests/inspector-sh-test.sh                  # rebuild and signing, through a symlink
 ```
