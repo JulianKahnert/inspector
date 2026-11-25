@@ -147,6 +147,9 @@ enum InterfaceInspection {
   }
 
   private static func fire(_ element: NSObject, name: String) -> Bool {
+    // A tab switches on its bar's own touch handling, which activation does not reach; it is
+    // refused here so the caller taps it at its hit point instead of a tap that did nothing.
+    if isInTabBar(element) { return false }
     if let control = element as? UISegmentedControl, let index = segmentIndex(control, name) {
       control.selectedSegmentIndex = index
       control.sendActions(for: .valueChanged)
@@ -159,6 +162,15 @@ enum InterfaceInspection {
       control.sendActions(for: .touchUpInside)
       control.sendActions(for: .primaryActionTriggered)
       return true
+    }
+    return false
+  }
+
+  private static func isInTabBar(_ element: NSObject) -> Bool {
+    var view = element as? UIView ?? ((element as? UIAccessibilityElement)?.accessibilityContainer as? UIView)
+    while let current = view {
+      if current is UITabBar || isTabButton(current) { return true }
+      view = current.superview
     }
     return false
   }

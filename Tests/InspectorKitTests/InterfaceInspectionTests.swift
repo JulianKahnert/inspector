@@ -100,6 +100,18 @@ struct InterfaceInspectionTests {
     #expect(home[1] > 720 && home[1] < 800)
   }
 
+  @Test("refuses a tab bar's button, which only its hit point switches")
+  func refusesTab() {
+    let bar = UITabBar(frame: CGRect(x: 0, y: 720, width: 400, height: 80))
+    bar.items = [UITabBarItem(title: "Home", image: nil, tag: 0), UITabBarItem(title: "Menu", image: nil, tag: 1)]
+    let window = window(with: bar)
+    bar.layoutIfNeeded()
+    let error = #expect(throws: InspectorError.self) {
+      try InterfaceInspection.activate("Menu", in: [window])
+    }
+    #expect(error?.code == .targetNotFound)
+  }
+
   @Test("registers ui.tap and the ui state, but keeps the app's own")
   func registersWithoutReplacing() async throws {
     let inspector = Inspector()
