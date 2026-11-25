@@ -21,6 +21,12 @@ struct Artifacts {
       $0["lastScreenshotFull"] = screenshotFull.map(JSONValue.string)
     }
   }
+
+  /// The targets in the hierarchy file; `nil` when Xcode named none or it cannot be read.
+  var targets: [Target]? {
+    guard let hierarchy, let text = try? String(contentsOfFile: hierarchy, encoding: .utf8) else { return nil }
+    return Target.list(inHierarchy: text)
+  }
 }
 
 extension Artifacts {

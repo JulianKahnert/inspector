@@ -68,6 +68,10 @@ struct InitCommand: InspectorCommand {
         detail: error.message)
     }
     config.instance = hello.instance ?? config.instance
+    // `warm` never changes the session; an `inspector session` started beside it may just have written
+    // a new one. Wait for its lock, then keep the session `config.json` names now.
+    _ = await environment.sessionLock(in: folder).waitWhileHeld()
+    if let latest = try folder.config() { config.session = latest.session }
     return try await Self.finish(config, hello: hello, state: state, in: folder, environment)
   }
 

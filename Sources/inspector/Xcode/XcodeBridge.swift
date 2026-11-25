@@ -162,6 +162,7 @@ enum XcodeTool: String, Sendable {
   case listTargets = "XcodeListTargets"
   case targetBuildSettings = "GetTargetBuildSettings"
   case startSession = "DeviceInteractionStartWorkspaceSession"
+  case startDeviceSession = "DeviceInteractionStartSession"
   case synthesize = "DeviceInteractionSynthesize"
   case installAndRun = "DeviceInteractionInstallAndRun"
   case endSession = "DeviceInteractionEndSession"

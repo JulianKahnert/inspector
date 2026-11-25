@@ -6,7 +6,7 @@ struct TypeCommand: InspectorCommand {
   static let configuration = CommandConfiguration(
     commandName: "type",
     abstract: "Types text into the focused field in the simulator.",
-    usage: "inspector type [--app <name>] <text> [--until <match> [--timeout <seconds>]]",
+    usage: "inspector type [--app <name>] <text> [--targets] [--until <match> [--timeout <seconds>]]",
     discussion: """
       `${NAME}` in the text is filled from `.inspector/.env` and masked in the answer and in \
       `run.json`. Xcode reads `\\u{000A}` in the text as Return. Without --until the answer is \
@@ -17,6 +17,8 @@ struct TypeCommand: InspectorCommand {
   @OptionGroup var options: AppOptions
 
   @OptionGroup var condition: UntilOptions
+
+  @OptionGroup var targets: TargetsOption
 
   // An array that takes unrecognized input, so text starting with a dash, such as `-5`, is not
   // read as an option. `validate()` keeps it to one value.
@@ -32,6 +34,7 @@ struct TypeCommand: InspectorCommand {
   func answer(in environment: Environment) async throws(InspectorError) -> any Encodable {
     let raw = text[0]
     let filled = Placeholders.fill(raw, from: try environment.placeholderValues(in: raw))
-    return try await Gesture.type(filled).perform(until: condition.request, app: options.app, in: environment)
+    return try await Gesture.type(filled).perform(
+      until: condition.request, app: options.app, targets: targets.targets, in: environment)
   }
 }

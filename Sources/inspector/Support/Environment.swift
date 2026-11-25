@@ -30,6 +30,13 @@ struct Environment: Sendable {
     _ throws(InspectorError) in
     throw InspectorError(code: .badRequest, message: "this environment runs no programs")
   }
+  /// This process's ID, which `.inspector/session.lock` holds while this call starts a session.
+  var processID: Int32 = ProcessInfo.processInfo.processIdentifier
+  /// Whether a process runs; a `session.lock` whose process does not is stale.
+  var processIsAlive: @Sendable (Int32) -> Bool = SessionLock.isRunning
+  /// The experimental early answer of a gesture with `--until`, from `INSPECTOR_EARLY`; `nil`
+  /// turns it off.
+  var earlyAnswer: EarlyAnswer?
 
   /// The apps on the network, found through Bonjour, and Xcode through `xcrun mcpbridge`, from the
   /// process's working directory.
@@ -43,7 +50,13 @@ struct Environment: Sendable {
       simulatorClaims: URL.applicationSupportDirectory.appending(
         path: "inspector/simulators", directoryHint: .isDirectory),
       launchBridge: { () throws(InspectorError) in try BridgeSubprocess() },
-      runProcess: { command throws(InspectorError) in try await ProcessOutput.run(command) })
+      runProcess: { command throws(InspectorError) in try await ProcessOutput.run(command) },
+      earlyAnswer: EarlyAnswer(variables: ProcessInfo.processInfo.environment))
+  }
+
+  /// The lock a call takes while it starts a session for `folder`.
+  func sessionLock(in folder: InspectorFolder) -> SessionLock {
+    SessionLock(in: folder, processID: processID, isAlive: processIsAlive)
   }
 
   /// Runs `body` with a fresh connection to Xcode's tools, closed when `body` returns.

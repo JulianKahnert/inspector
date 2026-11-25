@@ -13,8 +13,10 @@ struct EndCommand: InspectorCommand {
       """)
 
   func answer(in environment: Environment) async throws(InspectorError) -> any Encodable {
-    let session = try DeviceSession(in: environment)
-    let result = try await environment.withXcode { xcode throws(InspectorError) in try await session.end(on: xcode) }
+    var session = try DeviceSession(in: environment)
+    let result = try await environment.withXcode { xcode throws(InspectorError) in
+      try await session.end(on: xcode, in: environment)
+    }
     return Ended(session: session.name, xcode: result.json)
   }
 
