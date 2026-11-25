@@ -54,14 +54,13 @@ Xcode keeps its approval, and passes the arguments through.
   wrong name fails with `TARGET_NOT_FOUND` whose `detail` lists every target, which is your
   capture. Add `--targets` to a gesture to get the next screen's targets in its answer instead of
   a separate `capture`.
-- **In-app activation beats a gesture.** An iOS app has `ui.tap` built in: `send ui.tap
-  '"<name>"' --until …` activates the visible control with that identifier, label or title
-  inside the app in about 0.1 s, where a gesture through Xcode takes 1–2 s. It reaches only the
-  app's own controls: a system dialog, a web page or the keyboard needs a gesture, and a control
-  it cannot activate answers `TARGET_NOT_FOUND`; then tap it.
-- **A hit point you already have beats a name.** `tap <x> <y>` skips the capture `--target`
-  makes; the state's `ui.hitPoints` gives the tab bar's, navigation bar's and toolbar's buttons
-  by label without any capture.
+- **`tap --target` takes the fastest way by itself.** It asks the app first: the iOS app's
+  built-in `ui.tap` activates the visible control inside the app in about 0.1 s, a tab or bar
+  button from `ui.hitPoints` is tapped at its point without a capture, and only UI another
+  process draws (a system dialog, a web page, a context menu's items) is captured first. The
+  answer's `via` (`app`, `hitPoint`, `capture`) says which. Never write `send ui.tap` yourself;
+  add `--xcode` only when a control needs a real touch (a gesture recognizer that activation
+  misses: the step's `--until` failed although `via` was `app`).
 - **Write the script path out in every step.** No shell variables, loops or `$( )`: a host with
   an allow-list rejects the whole call.
 - **A screen whose targets are empty** is drawn by another process (a web sign-in page). Read its
@@ -182,7 +181,7 @@ its successful changing calls as a draft route, one call per line. Harden the dr
 prints that line and its error, so you continue from there by hand.
 
 Harden each line to the fastest call that is still sure:
-- an app control: `send ui.tap '"<name>"' … || tap --target <name> …`, the gesture only as fallback;
+- an app control: `tap --target <name> --until …`, which activates it inside the app when it can;
 - a control that appears a moment later: `tap --target <name> --find <s>`, never a coordinate;
 - UI another process draws (system dialog, web page): `@retry <s>` with `@has <name>` or
   `@lacks <name>` on the answer's targets, e.g. `@retry 20 @lacks Continue tap --target Continue --find 20`;

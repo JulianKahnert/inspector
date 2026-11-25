@@ -116,7 +116,7 @@ struct GestureCommandTests {
       #expect(
         outcome
           == .stdout(
-            #"{"gesture":"t 363.3 84","target":{"hitPoint":[363.3,84],"label":"Stand eintragen","type":"Button"}}"#))
+            #"{"gesture":"t 363.3 84","target":{"hitPoint":[363.3,84],"label":"Stand eintragen","type":"Button"},"via":"capture"}"#))
       #expect(
         xcode.calls == [
           FakeXcode.Call(tool: "DeviceInteractionSynthesize", arguments: ["interactSessionKey": "inspector-app-1"]),
@@ -141,6 +141,103 @@ struct GestureCommandTests {
 
       #expect(outcome.stdout.hasPrefix(#"{"gesture":"t 38 84","target":{"hitPoint":[38,84],"identifier":"BackButton""#))
     }
+  }
+
+  @Test("tap --target lets the app activate the control through ui.tap, without Xcode")
+  func tapTargetInApp() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let (app, xcode, tapped) = try await Self.appWithTap { _ in }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "--target", "Sichern"], in: sandbox.environment(app, in: "app"))
+
+      #expect(outcome == .stdout(#"{"target":"Sichern","via":"app"}"#))
+      #expect(tapped.names == ["Sichern"])
+      #expect(xcode.calls.isEmpty)
+    }
+  }
+
+  @Test("tap --target with --until after ui.tap answers like send, diffed against the state before")
+  func tapTargetInAppUntil() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let (app, xcode, _) = try await Self.appWithTap { _ in }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "--target", "Sichern", "--until", #"{"taps":1}"#], in: sandbox.environment(app, in: "app"))
+
+      #expect(outcome.stdout.contains(#""diff":[{"new":1,"old":0,"path":"taps"}]"#))
+      #expect(outcome.stdout.contains(#","via":"app"}"#))
+      #expect(xcode.calls.isEmpty)
+    }
+  }
+
+  @Test("tap --target taps once in the app: an --until that does not hold fails without an Xcode tap")
+  func tapTargetInAppUntilFails() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let (app, xcode, tapped) = try await Self.appWithTap { _ in }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "--target", "Sichern", "--until", #"{"taps":5}"#, "--timeout", "0.2"],
+        in: sandbox.environment(app, in: "app"))
+
+      #expect(outcome.stderr.contains(#""code":"EXPECTATION_FAILED""#))
+      #expect(tapped.names.count == 1)
+      #expect(xcode.calls.isEmpty)
+    }
+  }
+
+  @Test("tap --target taps a name from ui.hitPoints through Xcode without a capture when ui.tap cannot")
+  func tapTargetHitPoint() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let (app, xcode, _) = try await Self.appWithTap { name in
+        throw InspectorError(code: .targetNotFound, message: "ui.tap: `\(name)` could not be activated")
+      }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "--target", "Menu"], in: sandbox.environment(app, in: "app"))
+
+      #expect(outcome == .stdout(#"{"gesture":"t 334.8 822","via":"hitPoint"}"#))
+      #expect(xcode.calls.map { $0.arguments["interactionCommand"] } == ["t 334.8 822"])
+    }
+  }
+
+  @Test("tap --target --xcode never asks the app and captures")
+  func tapTargetXcodeOnly() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      try sandbox.write("artifacts/c-hierarchy.txt", try Self.fixture("meter-detail-hierarchy"))
+      let path = sandbox.url("artifacts/c-hierarchy.txt").path.replacing("/", with: #"\/"#)
+      let (app, xcode, tapped) = try await Self.appWithTap(
+        xcodeReply: { call in
+          guard call.arguments["interactionCommand"] == nil else { return .text(Self.artifacts) }
+          return .text(#"{"applicationState":"Running","hierarchyPath":"\#(path)","screenshotPath":"\/tmp\/c.png"}"#)
+        }
+      ) { _ in }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "--target", "Stand eintragen", "--xcode"], in: sandbox.environment(app, in: "app"))
+
+      #expect(outcome.stdout.hasPrefix(#"{"gesture":"t 363.3 84""#))
+      #expect(!outcome.stdout.contains("via"))
+      #expect(tapped.names.isEmpty)
+      #expect(xcode.calls.count == 2)
+    }
+  }
+
+  @Test("--xcode needs --target")
+  func xcodeUsage() async throws {
+    let outcome = await InspectorCLI.outcome(of: ["tap", "1", "2", "--xcode"], in: FakeXcode { _ in .silence }.environment())
+
+    #expect(outcome.exitCode == 64)
   }
 
   @Test(
@@ -581,6 +678,36 @@ struct GestureCommandTests {
     let transport = InMemoryTransport()
     try await transport.serve { await core.handle($0) }
     return (xcode.environment(serving: Environment(transport: { _ in transport }, instanceNames: { _ in [] })), xcode)
+  }
+
+  /// An app with `taps` (counting its own `ui.tap` calls), `ui.hitPoints` with `Menu`, and a
+  /// `ui.tap` that records the name and then runs `tap`; Xcode answers with `xcodeReply`, by
+  /// default the artifacts.
+  private static func appWithTap(
+    xcodeReply: (@Sendable (FakeXcode.Call) -> FakeXcode.Reply)? = nil,
+    _ tap: @escaping @Sendable (String) throws -> Void
+  ) async throws -> (Environment, FakeXcode, Tapped) {
+    let tapped = Tapped()
+    let xcode = FakeXcode(reply: xcodeReply ?? { _ in .text(Self.artifacts) })
+    let inspector = Inspector()
+    inspector.state("taps") { tapped.names.count }
+    inspector.state("ui") { ["hitPoints": ["Menu": [334.8, 822]]] }
+    inspector.action("ui.tap", schema: .string) { (name: String) in
+      try tap(name)
+      tapped.append(name)
+    }
+    let core = InspectorCore(provider: inspector, app: "Screen")
+    let transport = InMemoryTransport()
+    try await transport.serve { await core.handle($0) }
+    let app = xcode.environment(serving: Environment(transport: { _ in transport }, instanceNames: { _ in [] }))
+    return (app, xcode, tapped)
+  }
+
+  /// The names the app's `ui.tap` activated, in order.
+  final class Tapped: Sendable {
+    private let storage = Mutex<[String]>([])
+    var names: [String] { storage.withLock { $0 } }
+    func append(_ name: String) { storage.withLock { $0.append(name) } }
   }
 
   /// What `DeviceInteractionSynthesize` answers after a gesture.
