@@ -312,6 +312,13 @@ Task {
 
 On iOS, declare `_inspector._tcp` in the app's `NSBonjourServices` and give an `NSLocalNetworkUsageDescription`. On the Mac, the first browse from the CLI asks once for local network access.
 
+### Built in on iOS
+
+Where UIKit is, `serve()` registers two things of its own, each only when the app has not registered the same path or key:
+
+- **`ui.tap <name>`**, an action: activates the first visible, enabled element in the app's own windows whose accessibility identifier, label or button title is the name, or the segment of a segmented control with that title, as its touch would. A cell is selected through its list's delegate, a navigation bar's back button pops its stack, anything else gets `accessibilityActivate()` and then its control actions. It takes milliseconds, where a gesture through Xcode takes about a second. Nothing visible with the name is `TARGET_NOT_FOUND`, a disabled match `EXPECTATION_FAILED`. UI another process draws (a system dialog, a web page in a view service, a context menu's items) is not in the app's windows; tap it through Xcode.
+- **`ui`**, a state key: `{"hitPoints":{"<label>":[x, y]}}`, the centers of the labelled buttons in the visible tab bars, navigation bars and toolbars in window points, read from UIKit on every state request, so a driver taps a tab without a screen capture.
+
 ## Development
 
 ```sh
@@ -333,6 +340,13 @@ bash .claude/skills/inspector/tests/integrate-remove-test.sh              # abou
 bash .claude/skills/inspector/tests/integrate-remove-test.sh --no-build   # skips the builds
 bash .claude/skills/inspector/tests/logs-test.sh                          # logs.sh against a fake xcrun
 bash .claude/skills/inspector/tests/inspector-sh-test.sh                  # rebuild and signing, through a symlink
+bash .claude/skills/inspector/tests/route-test.sh                         # route.sh against a fake CLI
+```
+
+The UIKit code (`ui.tap`, `ui`) builds only for iOS, so `swift test` on the Mac skips its tests. They run on a simulator through the small package in `ios-tests/`, because the root package's scheme also builds the Mac-only CLI:
+
+```sh
+cd ios-tests && xcodebuild test -scheme ios-tests -destination 'platform=iOS Simulator,id=<udid>'
 ```
 
 ## References

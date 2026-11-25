@@ -54,13 +54,14 @@ Xcode keeps its approval, and passes the arguments through.
   wrong name fails with `TARGET_NOT_FOUND` whose `detail` lists every target, which is your
   capture. Add `--targets` to a gesture to get the next screen's targets in its answer instead of
   a separate `capture`.
-- **In-app activation beats a gesture.** When the catalog has `ui.tap`, `send ui.tap '"<name>"'
-  --until …` activates the control with that identifier or label inside the app in about 0.1 s,
-  where a gesture through Xcode takes 1–2 s. It reaches only the app's own controls: a system
-  dialog, a web page or the keyboard needs a gesture, and a control it cannot activate answers
-  `TARGET_NOT_FOUND`; then tap it.
+- **In-app activation beats a gesture.** An iOS app has `ui.tap` built in: `send ui.tap
+  '"<name>"' --until …` activates the visible control with that identifier, label or title
+  inside the app in about 0.1 s, where a gesture through Xcode takes 1–2 s. It reaches only the
+  app's own controls: a system dialog, a web page or the keyboard needs a gesture, and a control
+  it cannot activate answers `TARGET_NOT_FOUND`; then tap it.
 - **A hit point you already have beats a name.** `tap <x> <y>` skips the capture `--target`
-  makes; a state that publishes `hitPoints` gives you coordinates without any capture.
+  makes; the state's `ui.hitPoints` gives the tab bar's, navigation bar's and toolbar's buttons
+  by label without any capture.
 - **Write the script path out in every step.** No shell variables, loops or `$( )`: a host with
   an allow-list rejects the whole call.
 - **A screen whose targets are empty** is drawn by another process (a web sign-in page). Read its

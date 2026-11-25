@@ -1,0 +1,1 @@
+../../../Tests/InspectorKitTests/InterfaceInspectionTests.swift

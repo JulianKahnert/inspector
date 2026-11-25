@@ -170,6 +170,16 @@ public final class Inspector: Inspectable, Sendable {
     }
   }
 
+  /// Whether an action is registered at `path`.
+  func hasAction(_ path: String) -> Bool {
+    storage.withLock { $0.actions[path] != nil }
+  }
+
+  /// Whether a state reader is registered under `key`.
+  func hasState(_ key: String) -> Bool {
+    storage.withLock { $0.states[key] != nil }
+  }
+
   // MARK: - Observing registrations
 
   /// Calls `onChange` after every registration and every cancelled one, until the returned
@@ -214,6 +224,9 @@ public final class Inspector: Inspectable, Sendable {
     }
     guard didStart else { return }
     defer { isServing.withLock { $0 = false } }
+    #if canImport(UIKit)
+    await InterfaceInspection.register(on: self)
+    #endif
 
     let core = InspectorCore(provider: self, app: app)
     try await transport.serve { await core.handle($0) }
