@@ -7,7 +7,7 @@ Rules for any work with `import Testing` — writing, reviewing, or migrating fr
 
 1. **Invoke `ext:swift-testing-pro` first.** It carries the full, up-to-date Swift Testing ruleset (structs over classes, `#expect`/`#require`, async tests, traits, migration); load whichever of its reference files fit the request. Its review process and output format are the default here.
 2. **Layer custom-assertion judgment** — whenever the work involves a shared, reusable, or multi-part assertion / verification helper (or the user asks about one), apply *Custom assertions* below: decide whether a helper is even warranted, pick `#expect` vs `#require` vs `Issue.record`, and thread `sourceLocation` so failures report at the call site.
-3. **Run the detector when reviewing existing tests** — `scripts/find-assertion-helpers.sh` in the `jk:builder` skill, over the test sources, flags helpers missing a `sourceLocation:` parameter. Treat hits as leads to confirm, then fix per Pattern 1/2 below.
+3. **Run the detector when reviewing existing tests** — `scripts/find-assertion-helpers.sh` over the test sources, flags helpers missing a `sourceLocation:` parameter. Treat hits as leads to confirm, then fix per Pattern 1/2 below.
 4. **Report** in the base skill's output format (findings by file, rule named, brief before/after), folding the custom-assertion findings in alongside.
 
 Nothing here contradicts `ext:swift-testing-pro`. Where it already covers a point (e.g. the `sourceLocation` passthrough for verification methods), defer to it rather than restating it.
@@ -132,7 +132,7 @@ func expectUserCount(
 
 ### 4. Detecting helpers that forgot `sourceLocation`
 
-`scripts/find-assertion-helpers.sh [path …]`, which ships with the `jk:builder` skill (`~/.claude/skills/jk/skills/builder/scripts/`), flags every non-`@Test` function that calls `#expect` / `#require` / `Issue.record` without a `sourceLocation` parameter. It's a heuristic lead-finder (naive about braces inside string literals), so confirm each hit — but it's the fast first pass on a review:
+`scripts/find-assertion-helpers.sh [path …]` flags every non-`@Test` function that calls `#expect` / `#require` / `Issue.record` without a `sourceLocation` parameter. It's a heuristic lead-finder (naive about braces inside string literals), so confirm each hit — but it's the fast first pass on a review:
 
 ```
 $ scripts/find-assertion-helpers.sh Tests/

@@ -23,15 +23,52 @@ Xcode keeps its approval, and passes the arguments through.
   An expectation only a screenshot could check is a missing registration: report the run as not
   checkable and add the value to the screen's registration (*Integrating*).
 - **Every navigation and every gesture carries `--until '<match>'`** naming what the next screen
-  has. Its answer is `{"settled","state","diff"}`; read the `diff`.
-- **`tap --target <identifier|label>` first.** Coordinates are for swipes and for controls with
-  neither identifier nor label, taken from `capture`'s `targets`.
-- **Pause about 1 s after a navigation that animates** (push, sheet, alert) before a gesture on
-  the new screen. The state reports the screen before it has slid in, and a gesture during the
-  animation is lost.
+  has. Its answer is `{"settled","state","diff"}`; read the `diff`. A step that waits for the
+  network (sign-in, a first sync, an upload) adds `--timeout 90`: the default is 3 s.
+- **Turns are the cost, not calls.** Each of your turns costs 2–5 s, a call 0.1–2 s.
+- **Write the whole route as code, then read only where it stopped.** After `init`, write every
+  step of the task as one `&&` chain in a single Bash call, also across screens: names from the
+  task are your targets, not something to look up first. Each step carries its `--until`; a
+  control that appears a moment later (a dialog sliding in, a menu item) gets
+  `tap --target <name> --find 3`. Send every step's answer to `>/dev/null` except the last: a
+  failing step still prints its error, with every target in `detail`, and the chain stops there.
+  Your next call fixes that one step and chains everything after it again. A route you know
+  whole takes one call; aim for under five. Do not look before a step to check it will work, and
+  do not look after it to check it worked: its `--until` and `--find` do both. A picker, a menu
+  and its item, a system dialog and the screen after it go into the same call:
+
+  ```sh
+  scripts/inspector.sh tap --target Server --until '{"login":{}}' >/dev/null &&
+    scripts/inspector.sh tap --target Staging --find 3 --until '{"login":{"server":"staging"}}' >/dev/null &&
+    scripts/inspector.sh tap --target 'Sign in' --until '{"login":{}}' >/dev/null &&
+    scripts/inspector.sh tap --target Continue --find 5 --until '{"login":{}}' --targets
+  ```
+
+  The first answer you read is the one at the end, or the error of the step that stopped.
+- **Never `sleep`.** A wait is a condition: `--until` on the step, `wait '<match>' --timeout <s>`
+  for something slow, `tap --target <name> --find <s>` for a control that appears outside the app
+  (a system dialog). A gesture answers only after Xcode captured the screen again, so the next
+  gesture in the same chain finds the new screen settled.
+- **Tap a name before you look for it.** A control the task or an earlier answer names is tapped
+  with `tap --target <name>` without a `capture` first: `--target` captures by itself, and a
+  wrong name fails with `TARGET_NOT_FOUND` whose `detail` lists every target, which is your
+  capture. Add `--targets` to a gesture to get the next screen's targets in its answer instead of
+  a separate `capture`.
+- **`tap --target` takes the fastest way by itself.** It asks the app first: the iOS app's
+  built-in `ui.tap` activates the visible control inside the app in about 0.1 s, a tab or bar
+  button from `ui.hitPoints` is tapped at its point without a capture, and only UI another
+  process draws (a system dialog, a web page, a context menu's items) is captured first. The
+  answer's `via` (`app`, `hitPoint`, `capture`) says which. Never write `send ui.tap` yourself;
+  add `--xcode` only when a control needs a real touch (a gesture recognizer that activation
+  misses: the step's `--until` failed although `via` was `app`).
+- **Write the script path out in every step.** No shell variables, loops or `$( )`: a host with
+  an allow-list rejects the whole call.
+- **A screen whose targets are empty** is drawn by another process (a web sign-in page). Read its
+  screenshot once and take every point you need from that one image. Tap the field, then `type`
+  the text with `\u{000A}` (Return) at its end, which submits the form, carrying the `--until` of
+  the screen after it.
 - **End the route at the first failed step.** A route that goes on types into whatever is still
-  open and can save into real data. Diagnose, fix, then start again from the state. Steps chained
-  in one Bash call go with `&&`.
+  open and can save into real data. Diagnose, fix, then start again from the state.
 - **Ask before an action or tap that writes real data** (sends a message, deletes an entry);
   navigating needs no question.
 
@@ -82,15 +119,13 @@ Xcode keeps its approval, and passes the arguments through.
    run needs none, and what you could not reach.
 
 ```sh
-s=scripts/inspector.sh   # paths are whatever the app registered; `catalog` names them
-$s send tabs.select settings --until '{"settings.list":{}}' &&
-  $s send settings.open 2 --until '{"settings.detail":{"isLoading":false}}' &&
-  sleep 1 &&
-  $s tap --target Edit --until '{"settings.detail":{"isEditing":true}}'
+scripts/inspector.sh send tabs.select settings --until '{"settings.list":{}}' &&
+  scripts/inspector.sh send settings.open 2 --until '{"settings.detail":{"isLoading":false}}' &&
+  scripts/inspector.sh tap --target Edit --until '{"settings.detail":{"isEditing":true}}' --targets
 ```
 
-For a condition a match cannot express (`>`, a regex), poll with
-`scripts/wait-state.sh '<jq filter>' [seconds]`.
+To wait without a gesture: `scripts/inspector.sh wait '<match>' --timeout <s>`. Only for a
+condition a match cannot express (`>`, a regex): `scripts/wait-state.sh '<jq filter>' [seconds]`.
 
 ## Session
 
@@ -136,10 +171,31 @@ scaled (a meter reading in thousandths) is registered as displayed, or its key n
 Every sheet and pushed screen gets a close action. Details, rules and the template:
 `references/integration.md`.
 
+## Routes
+
+A way you will take again (a sign-in, the path to the screen you debug) becomes a route: one call
+plays it, where finding it took one turn per step. `scripts/inspector.sh` logs every call to
+`.inspector/calls.jsonl`; after a run that reached the screen, `scripts/route.sh record` writes
+its successful changing calls as a draft route, one call per line. Harden the draft once, then
+`scripts/route.sh play <route> [--from n] [--to n]`; it stops at the first line that fails and
+prints that line and its error, so you continue from there by hand.
+
+Harden each line to the fastest call that is still sure:
+- an app control: `tap --target <name> --until …`, which activates it inside the app when it can;
+- a control that appears a moment later: `tap --target <name> --find <s>`, never a coordinate;
+- UI another process draws (system dialog, web page): `@retry <s>` with `@has <name>` or
+  `@lacks <name>` on the answer's targets, e.g. `@retry 20 @lacks Continue tap --target Continue --find 20`;
+- a slow step (network): `wait '<match>' --timeout 90` after it;
+- drop the misses the recording kept (a tap that hit nothing, a scroll too many).
+
+Keep a route beside the integration (`.inspector/routes/`) and name it after where it ends.
+
 ## Scripts
 
 - `scripts/inspector.sh [--app name] <command…>`: the CLI, rebuilt when stale and signed
   (`INSPECTOR_REBUILD=1` forces a build).
+- `scripts/route.sh record [<calls.jsonl>]` / `play <route> [--from n] [--to n]`: turns the
+  logged calls into a route and plays one back (*Routes*).
 - `scripts/wait-state.sh '<jq filter>' [seconds]`: polls `state` until the filter yields neither
   `null` nor `false`.
 - `scripts/logs.sh [--all] [--since <seconds>]`: after a failed step, the app's error and fault

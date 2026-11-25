@@ -116,7 +116,7 @@ struct GestureCommandTests {
       #expect(
         outcome
           == .stdout(
-            #"{"gesture":"t 363.3 84","target":{"hitPoint":[363.3,84],"label":"Stand eintragen","type":"Button"}}"#))
+            #"{"gesture":"t 363.3 84","target":{"hitPoint":[363.3,84],"label":"Stand eintragen","type":"Button"},"via":"capture"}"#))
       #expect(
         xcode.calls == [
           FakeXcode.Call(tool: "DeviceInteractionSynthesize", arguments: ["interactSessionKey": "inspector-app-1"]),
@@ -141,6 +141,103 @@ struct GestureCommandTests {
 
       #expect(outcome.stdout.hasPrefix(#"{"gesture":"t 38 84","target":{"hitPoint":[38,84],"identifier":"BackButton""#))
     }
+  }
+
+  @Test("tap --target lets the app activate the control through ui.tap, without Xcode")
+  func tapTargetInApp() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let (app, xcode, tapped) = try await Self.appWithTap { _ in }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "--target", "Sichern"], in: sandbox.environment(app, in: "app"))
+
+      #expect(outcome == .stdout(#"{"target":"Sichern","via":"app"}"#))
+      #expect(tapped.names == ["Sichern"])
+      #expect(xcode.calls.isEmpty)
+    }
+  }
+
+  @Test("tap --target with --until after ui.tap answers like send, diffed against the state before")
+  func tapTargetInAppUntil() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let (app, xcode, _) = try await Self.appWithTap { _ in }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "--target", "Sichern", "--until", #"{"taps":1}"#], in: sandbox.environment(app, in: "app"))
+
+      #expect(outcome.stdout.contains(#""diff":[{"new":1,"old":0,"path":"taps"}]"#))
+      #expect(outcome.stdout.contains(#","via":"app"}"#))
+      #expect(xcode.calls.isEmpty)
+    }
+  }
+
+  @Test("tap --target taps once in the app: an --until that does not hold fails without an Xcode tap")
+  func tapTargetInAppUntilFails() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let (app, xcode, tapped) = try await Self.appWithTap { _ in }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "--target", "Sichern", "--until", #"{"taps":5}"#, "--timeout", "0.2"],
+        in: sandbox.environment(app, in: "app"))
+
+      #expect(outcome.stderr.contains(#""code":"EXPECTATION_FAILED""#))
+      #expect(tapped.names.count == 1)
+      #expect(xcode.calls.isEmpty)
+    }
+  }
+
+  @Test("tap --target taps a name from ui.hitPoints through Xcode without a capture when ui.tap cannot")
+  func tapTargetHitPoint() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let (app, xcode, _) = try await Self.appWithTap { name in
+        throw InspectorError(code: .targetNotFound, message: "ui.tap: `\(name)` could not be activated")
+      }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "--target", "Menu"], in: sandbox.environment(app, in: "app"))
+
+      #expect(outcome == .stdout(#"{"gesture":"t 334.8 822","via":"hitPoint"}"#))
+      #expect(xcode.calls.map { $0.arguments["interactionCommand"] } == ["t 334.8 822"])
+    }
+  }
+
+  @Test("tap --target --xcode never asks the app and captures")
+  func tapTargetXcodeOnly() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      try sandbox.write("artifacts/c-hierarchy.txt", try Self.fixture("meter-detail-hierarchy"))
+      let path = sandbox.url("artifacts/c-hierarchy.txt").path.replacing("/", with: #"\/"#)
+      let (app, xcode, tapped) = try await Self.appWithTap(
+        xcodeReply: { call in
+          guard call.arguments["interactionCommand"] == nil else { return .text(Self.artifacts) }
+          return .text(#"{"applicationState":"Running","hierarchyPath":"\#(path)","screenshotPath":"\/tmp\/c.png"}"#)
+        }
+      ) { _ in }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "--target", "Stand eintragen", "--xcode"], in: sandbox.environment(app, in: "app"))
+
+      #expect(outcome.stdout.hasPrefix(#"{"gesture":"t 363.3 84""#))
+      #expect(!outcome.stdout.contains("via"))
+      #expect(tapped.names.isEmpty)
+      #expect(xcode.calls.count == 2)
+    }
+  }
+
+  @Test("--xcode needs --target")
+  func xcodeUsage() async throws {
+    let outcome = await InspectorCLI.outcome(of: ["tap", "1", "2", "--xcode"], in: FakeXcode { _ in .silence }.environment())
+
+    #expect(outcome.exitCode == 64)
   }
 
   @Test(
@@ -355,6 +452,199 @@ struct GestureCommandTests {
     }
   }
 
+  @Test("--targets adds the targets of the hierarchy Xcode captured after the gesture", arguments: [
+    ["tap", "1", "2", "--targets"], ["swipe", "1", "2", "3", "4", "--targets"], ["type", "42", "--targets"],
+  ])
+  func targetsAfterGesture(arguments: [String]) async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let xcode = try Self.afterGesture("meter-detail", in: sandbox)
+      let targets = Target.list(inHierarchy: try Self.fixture("meter-detail-hierarchy"))
+
+      let outcome = await InspectorCLI.outcome(of: arguments, in: sandbox.environment(xcode.environment(), in: "app"))
+
+      let answer = try JSONDecoder().decode(JSONValue.self, from: Data(outcome.stdout.utf8))
+      #expect(answer["gesture"] != nil)
+      #expect(WireJSON.line(try #require(answer["targets"])) == WireJSON.line(targets))
+      #expect(!targets.isEmpty)
+    }
+  }
+
+  @Test("--targets with --until is the wait's answer with targets beside its fields")
+  func targetsUntil() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let (app, _) = try await Self.screen(hierarchy: try Self.hierarchyFile("enter-reading", in: sandbox))
+      let targets = Target.list(inHierarchy: try Self.fixture("enter-reading-hierarchy"))
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "1", "2", "--targets", "--until", #"{"taps":1}"#], in: sandbox.environment(app, in: "app"))
+
+      #expect(
+        outcome
+          == .stdout(
+            #"{"diff":[{"new":1,"old":0,"path":"taps"}],"settled":true,"state":{"taps":1},"targets":\#(WireJSON.line(targets))}"#
+          ))
+    }
+  }
+
+  @Test("an answer with targets encodes them as one more field of the answer's object")
+  func withTargetsEncoding() {
+    let target = Target(type: "Button", label: "Sichern", hitPoint: Point(x: 1, y: 2))
+
+    #expect(
+      WireJSON.line(Gesture.WithTargets(answer: Gesture.Performed(gesture: "t 1 2"), targets: [target]))
+        == #"{"gesture":"t 1 2","targets":[{"hitPoint":[1,2],"label":"Sichern","type":"Button"}]}"#)
+    #expect(
+      WireJSON.line(Gesture.WithTargets(answer: Gesture.Performed(gesture: "t 1 2"), targets: nil))
+        == #"{"gesture":"t 1 2"}"#)
+  }
+
+  @Test("tap --target --find captures again until the target appears, then taps it")
+  func findTarget() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let before = try Self.hierarchyFile("meter-detail", in: sandbox)
+      let after = try Self.hierarchyFile("enter-reading", in: sandbox)
+      let captures = Mutex(0)
+      let xcode = FakeXcode { call in
+        guard call.arguments["interactionCommand"] == nil else { return .text(Self.artifacts) }
+        let count = captures.withLock {
+          $0 += 1
+          return $0
+        }
+        return .text(Self.capture(hierarchy: count < 3 ? before : after))
+      }
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "--target", "Sichern", "--find", "5"], in: sandbox.environment(xcode.environment(), in: "app"))
+
+      #expect(outcome.stdout.hasPrefix(#"{"gesture":"t 339.5 100","target":"#))
+      #expect(captures.withLock { $0 } == 3)
+      #expect(xcode.calls.last?.arguments["interactionCommand"] == "t 339.5 100")
+    }
+  }
+
+  @Test("tap --target --find fails with TARGET_NOT_FOUND once the seconds are over, having tapped nothing")
+  func findTargetTimesOut() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let xcode = try Self.screenOf("meter-detail", in: sandbox)
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "--target", "Sichern", "--find", "0.4"], in: sandbox.environment(xcode.environment(), in: "app"))
+
+      #expect(outcome.stderr.contains(#""code":"TARGET_NOT_FOUND""#))
+      #expect(xcode.calls.count >= 2)
+      #expect(xcode.calls.allSatisfy { $0.arguments["interactionCommand"] == nil })
+    }
+  }
+
+  @Test(
+    "--find needs --target and a positive number of seconds, else it is a usage error",
+    arguments: [
+      ["tap", "1", "2", "--find", "1"], ["tap", "--target", "Sichern", "--find", "0"],
+      ["tap", "--target", "Sichern", "--find", "-1"], ["tap", "--target", "Sichern", "--find", "nan"],
+    ])
+  func findUsage(arguments: [String]) async throws {
+    let outcome = await InspectorCLI.outcome(of: arguments, in: FakeXcode { _ in .silence }.environment())
+
+    #expect(outcome.exitCode == 64)
+  }
+
+  @Test("with the early answer, a gesture answers once the condition held, without waiting for Xcode")
+  func earlyAnswer() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      // Xcode takes the touch but never answers, as if it were still capturing.
+      let (app, xcode) = try await Self.screen(answer: .silence)
+      var environment = sandbox.environment(app, in: "app")
+      environment.earlyAnswer = EarlyAnswer(minimum: .milliseconds(20))
+      let clock = ContinuousClock()
+      let start = clock.now
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "1", "2", "--targets", "--until", #"{"taps":1}"#], in: environment)
+
+      #expect(outcome == .stdout(#"{"diff":[{"new":1,"old":0,"path":"taps"}],"settled":true,"state":{"taps":1}}"#))
+      #expect(clock.now - start < .seconds(5))
+      #expect(xcode.calls.count == 1)
+      #expect(try sandbox.json("app/.inspector/run.json")["lastHierarchy"] == nil)
+    }
+  }
+
+  @Test("with the early answer, Xcode's error still wins when it comes first")
+  func earlyAnswerXcodeFails() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let (app, _) = try await Self.screen(answer: .error("synthesis failed"))
+      var environment = sandbox.environment(app, in: "app")
+      environment.earlyAnswer = EarlyAnswer(minimum: .zero)
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "1", "2", "--until", #"{"taps":5}"#, "--timeout", "2"], in: environment)
+
+      #expect(outcome.stderr.contains(#""code":"XCODE_ERROR""#))
+    }
+  }
+
+  @Test("with the early answer, Xcode answering first gives today's answer, targets included")
+  func earlyAnswerXcodeFirst() async throws {
+    try await Sandbox.run { sandbox in
+      try sandbox.makeDirectory("app/.git")
+      try sandbox.write("app/.inspector/config.json", Self.config)
+      let (app, _) = try await Self.screen(hierarchy: try Self.hierarchyFile("enter-reading", in: sandbox))
+      var environment = sandbox.environment(app, in: "app")
+      environment.earlyAnswer = EarlyAnswer(minimum: .seconds(2))
+
+      let outcome = await InspectorCLI.outcome(
+        of: ["tap", "1", "2", "--targets", "--until", #"{"taps":1}"#], in: environment)
+
+      #expect(outcome.stdout.hasPrefix(#"{"diff":[{"new":1,"old":0,"path":"taps"}],"settled":true,"state":{"taps":1},"targets":["#))
+      #expect(try sandbox.json("app/.inspector/run.json")["lastHierarchy"] != nil)
+    }
+  }
+
+  @Test(
+    "INSPECTOR_EARLY=1 turns the early answer on, INSPECTOR_EARLY_MIN_MS sets its minimum, 350 ms by default",
+    arguments: [
+      ([:], nil),
+      (["INSPECTOR_EARLY": "0"], nil),
+      (["INSPECTOR_EARLY_MIN_MS": "10"], nil),
+      (["INSPECTOR_EARLY": "1"], EarlyAnswer(minimum: .milliseconds(350))),
+      (["INSPECTOR_EARLY": "1", "INSPECTOR_EARLY_MIN_MS": "120"], EarlyAnswer(minimum: .milliseconds(120))),
+      (["INSPECTOR_EARLY": "1", "INSPECTOR_EARLY_MIN_MS": "0"], EarlyAnswer(minimum: .zero)),
+      (["INSPECTOR_EARLY": "1", "INSPECTOR_EARLY_MIN_MS": "-5"], EarlyAnswer(minimum: .milliseconds(350))),
+      (["INSPECTOR_EARLY": "1", "INSPECTOR_EARLY_MIN_MS": "soon"], EarlyAnswer(minimum: .milliseconds(350))),
+    ] as [([String: String], EarlyAnswer?)])
+  func earlyAnswerVariables(variables: [String: String], expected: EarlyAnswer?) {
+    #expect(EarlyAnswer(variables: variables) == expected)
+  }
+
+  /// The fixture `hierarchy`, written into the sandbox; its path.
+  private static func hierarchyFile(_ hierarchy: String, in sandbox: Sandbox) throws -> String {
+    try sandbox.write("artifacts/\(hierarchy)-hierarchy.txt", try fixture("\(hierarchy)-hierarchy"))
+    return sandbox.url("artifacts/\(hierarchy)-hierarchy.txt").path
+  }
+
+  /// What a capture answers with the hierarchy file at `path`.
+  private static func capture(hierarchy path: String) -> String {
+    let escaped = path.replacing("/", with: #"\/"#)
+    return #"{"applicationState":"Running","hierarchyPath":"\#(escaped)","screenshotPath":"\/tmp\/c.png"}"#
+  }
+
+  /// Xcode whose every call answers with the fixture `hierarchy` as the screen afterwards.
+  private static func afterGesture(_ hierarchy: String, in sandbox: Sandbox) throws -> FakeXcode {
+    let answer = capture(hierarchy: try hierarchyFile(hierarchy, in: sandbox))
+    return FakeXcode { _ in .text(answer) }
+  }
+
   /// Xcode with the screen from the fixture `hierarchy` on it: a capture answers with that
   /// hierarchy, a gesture with ``artifacts``.
   private static func screenOf(_ hierarchy: String, in sandbox: Sandbox) throws -> FakeXcode {
@@ -371,12 +661,16 @@ struct GestureCommandTests {
     return try String(contentsOf: url, encoding: .utf8)
   }
 
-  /// An app whose state counts the gestures Xcode synthesized, and that Xcode.
-  private static func screen() async throws -> (Environment, FakeXcode) {
+  /// An app whose state counts the gestures Xcode synthesized, and that Xcode, which answers a
+  /// gesture with `answer`, by default the artifacts with the hierarchy file at `hierarchy`.
+  private static func screen(
+    hierarchy: String? = nil, answer: FakeXcode.Reply? = nil
+  ) async throws -> (Environment, FakeXcode) {
     let taps = Mutex(0)
+    let reply = answer ?? .text(hierarchy.map { capture(hierarchy: $0) } ?? Self.artifacts)
     let xcode = FakeXcode { call in
       if call.arguments["interactionCommand"] != nil { taps.withLock { $0 += 1 } }
-      return .text(Self.artifacts)
+      return reply
     }
     let inspector = Inspector()
     inspector.state("taps") { taps.withLock { $0 } }
@@ -384,6 +678,36 @@ struct GestureCommandTests {
     let transport = InMemoryTransport()
     try await transport.serve { await core.handle($0) }
     return (xcode.environment(serving: Environment(transport: { _ in transport }, instanceNames: { _ in [] })), xcode)
+  }
+
+  /// An app with `taps` (counting its own `ui.tap` calls), `ui.hitPoints` with `Menu`, and a
+  /// `ui.tap` that records the name and then runs `tap`; Xcode answers with `xcodeReply`, by
+  /// default the artifacts.
+  private static func appWithTap(
+    xcodeReply: (@Sendable (FakeXcode.Call) -> FakeXcode.Reply)? = nil,
+    _ tap: @escaping @Sendable (String) throws -> Void
+  ) async throws -> (Environment, FakeXcode, Tapped) {
+    let tapped = Tapped()
+    let xcode = FakeXcode(reply: xcodeReply ?? { _ in .text(Self.artifacts) })
+    let inspector = Inspector()
+    inspector.state("taps") { tapped.names.count }
+    inspector.state("ui") { ["hitPoints": ["Menu": [334.8, 822]]] }
+    inspector.action("ui.tap", schema: .string) { (name: String) in
+      try tap(name)
+      tapped.append(name)
+    }
+    let core = InspectorCore(provider: inspector, app: "Screen")
+    let transport = InMemoryTransport()
+    try await transport.serve { await core.handle($0) }
+    let app = xcode.environment(serving: Environment(transport: { _ in transport }, instanceNames: { _ in [] }))
+    return (app, xcode, tapped)
+  }
+
+  /// The names the app's `ui.tap` activated, in order.
+  final class Tapped: Sendable {
+    private let storage = Mutex<[String]>([])
+    var names: [String] { storage.withLock { $0 } }
+    func append(_ name: String) { storage.withLock { $0.append(name) } }
   }
 
   /// What `DeviceInteractionSynthesize` answers after a gesture.

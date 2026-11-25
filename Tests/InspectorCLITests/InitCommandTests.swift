@@ -71,7 +71,7 @@ struct InitCommandTests {
 
       let project = sandbox.url("app/App/Demo.xcodeproj").path
       let config =
-        #"{"app":"DemoHost","bundleId":"com.example.demo","instance":"DemoHost @ Mac","logSubsystem":"com.example.","scheme":"DemoHost","session":"inspector-app-20261019-085320","udid":"UDID-1","workspace":"workspace-1","writtenAt":"2026-10-19T08:53:20Z"}"#
+        #"{"app":"DemoHost","bundleId":"com.example.demo","instance":"DemoHost @ Mac","logSubsystem":"com.example.","scheme":"DemoHost","session":"inspector-app-20261019-085320-250","udid":"UDID-1","workspace":"workspace-1","writtenAt":"2026-10-19T08:53:20Z"}"#
       #expect(
         outcome
           == .stdout(
@@ -87,10 +87,10 @@ struct InitCommandTests {
             tool: "GetTargetBuildSettings", arguments: ["workspaceIdentifier": "workspace-1", "targetName": "DemoHost"]),
           FakeXcode.Call(
             tool: "DeviceInteractionStartWorkspaceSession",
-            arguments: ["sessionIdentifier": "inspector-app-20261019-085320", "workspaceIdentifier": "workspace-1"]),
+            arguments: ["sessionIdentifier": "inspector-app-20261019-085320-250", "workspaceIdentifier": "workspace-1"]),
           FakeXcode.Call(
             tool: "DeviceInteractionInstallAndRun",
-            arguments: ["interactionSessionKey": "inspector-app-20261019-085320", "workspaceIdentifier": "workspace-1"]),
+            arguments: ["interactionSessionKey": "inspector-app-20261019-085320-250", "workspaceIdentifier": "workspace-1"]),
         ])
       #expect(try sandbox.json("app/.inspector/config.json") == (try JSONDecoder().decode(JSONValue.self, from: Data(config.utf8))))
       // Marked like integrate.sh's entry, so remove.sh takes it out again.
@@ -199,7 +199,7 @@ struct InitCommandTests {
       let outcome = await InspectorCLI.outcome(of: ["init"], in: sandbox.environment(environment, in: "app"))
 
       #expect(outcome.exitCode == 0)
-      #expect(try sandbox.json("elsewhere/.inspector/config.json")["session"] == "inspector-app-20261019-085320")
+      #expect(try sandbox.json("elsewhere/.inspector/config.json")["session"] == "inspector-app-20261019-085320-250")
       #expect(try sandbox.json("elsewhere/.inspector/run.json")["lastStep"]?["command"] == "init")
       #expect(!processes.commands.contains { $0.first == "/usr/bin/git" })
     }
@@ -329,7 +329,7 @@ struct InitCommandTests {
         outcome
           == .stderr(
             #"{"code":"XCODE_ERROR","detail":"\#(failure)","message":"`DeviceInteractionInstallAndRun` failed: \#(failure)"}"#))
-      #expect(try sandbox.json("app/.inspector/config.json")["session"] == "inspector-app-20261019-085320")
+      #expect(try sandbox.json("app/.inspector/config.json")["session"] == "inspector-app-20261019-085320-250")
     }
   }
 
@@ -349,7 +349,7 @@ struct InitCommandTests {
             #"{"code":"APP_NOT_FOUND","detail":"no serving app found","message":"the app does not serve after its launch; check that its debug build calls `serve()`, or pass `--app` with the name `inspector apps` lists"}"#
           ))
       #expect(selections.all == ["DemoHost", "DemoHost", "DemoHost"])
-      #expect(try sandbox.json("app/.inspector/config.json")["session"] == "inspector-app-20261019-085320")
+      #expect(try sandbox.json("app/.inspector/config.json")["session"] == "inspector-app-20261019-085320-250")
     }
   }
 

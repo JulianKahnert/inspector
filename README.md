@@ -192,7 +192,7 @@ $ scripts/inspector.sh capture | jq -c '.targets[] | select(.label == "Stand ein
 {"hitPoint":[363.3,84],"label":"Stand eintragen","type":"Button"}
 ```
 
-Gestures run in the same session, and **only in the simulator**: Xcode offers no physical device for them. `tap <x> <y>` taps a point, `tap --target <name>` captures first and taps the hit point of the one target whose identifier or label is the name, `swipe <x1> <y1> <x2> <y2> [seconds]` drags from one point to the other, and `type <text>` types into the focused field, with `${NAME}` filled from `.env` and masked like a `send` payload. Each takes `--until` and `--timeout` like `send`: the CLI reads the state, performs the gesture and has the app wait for the match, so the answer is `send`'s, diffed against the state before the gesture. Without `--until` the answer is the command Xcode ran, and for `--target` the target it hit. Every gesture writes Xcode's new screenshot and hierarchy to `run.json` like `capture`.
+Gestures run in the same session, and **only in the simulator**: Xcode offers no physical device for them. `tap <x> <y>` taps a point, `tap --target <name>` first asks the app (its built-in `ui.tap` activates the control in milliseconds, else a name in its `ui.hitPoints` is tapped there through Xcode) and only then captures and taps the hit point of the one target whose identifier or label is the name; `via` in the answer says which way it went (`app`, `hitPoint`, `capture`) and `--xcode` skips the app, `swipe <x1> <y1> <x2> <y2> [seconds]` drags from one point to the other, and `type <text>` types into the focused field, with `${NAME}` filled from `.env` and masked like a `send` payload. Each takes `--until` and `--timeout` like `send`: the CLI reads the state, performs the gesture and has the app wait for the match, so the answer is `send`'s, diffed against the state before the gesture. Without `--until` the answer is the command Xcode ran, and for `--target` the target it hit. Every gesture writes Xcode's new screenshot and hierarchy to `run.json` like `capture`.
 
 ```console
 $ scripts/inspector.sh send meters.editReading 0 --until '{"meters":{"detail":{"isEnterReadingOpen":true}}}'
@@ -208,6 +208,10 @@ $ scripts/inspector.sh type 2100000
 - **The screen lags the state**: the state reports a sheet open as soon as the app decided to present it, while the sheet is still sliding in. A gesture during that animation can be lost (a swipe right after the sheet opened failed every time at 0.2 s, reliably passed after 1 s), so wait about a second after a navigation before a gesture that needs the new screen. A gesture with `--until` shows such a loss as `EXPECTATION_FAILED` instead of a silent miss.
 - **A target** names a control by identifier or label; none is `TARGET_NOT_FOUND`, several at different points `TARGET_AMBIGUOUS`, both with the targets in `detail`. A control with neither, such as an unlabelled text field, is tapped by the coordinates `capture` lists.
 - **Typing** goes to the focused field, after whatever text it holds; Xcode reads `\u{0008}` as backspace and `\u{000A}` as Return.
+- **A target that is still coming**, such as a system dialog, takes `tap --target <name> --find <s>`: it captures again every 300 ms until the target is there, at most that many seconds.
+- **The next screen in the same answer**: `--targets` on a gesture adds the targets on the screen right after it, so the next step needs no `capture`.
+- **Faster answers**: with `INSPECTOR_EARLY=1` a gesture with `--until` answers as soon as the condition held, instead of waiting about 1.4 s for Xcode's own answer; that answer has no `targets`.
+- **The session while the app launches**: `inspector session` starts a new Xcode session on the simulator in `config.json` without asking the app, so it can run in parallel with the launch; every other call into the session waits for it.
 
 A refused binary ends in `NOT_APPROVED`, an ended session whose app is gone in `NO_SESSION`, a capture without a hierarchy in `NO_HIERARCHY`; [ADR 004](docs/adr/004-cli.md#commands-through-xcode) has every code, the steps of `init` and the session restart.
 
@@ -242,6 +246,8 @@ Its `scripts/inspector.sh` follows the link back to this checkout, builds the CL
    ```
 
    If the screenshot showed something the task needed, add it to that screen's registered state, so the next run reads it as JSON instead.
+
+6. **Replay a known way as a route.** `scripts/inspector.sh` logs every call to `.inspector/calls.jsonl`. After a run that reached the screen, `scripts/route.sh record > .inspector/routes/<name>.route` turns the log into a route, one call per line; `scripts/route.sh play <route>` plays it without a turn between the steps and stops at the first line that does not pass. Before a line, `@retry <s>` repeats it until it passes, `@has <name>` and `@lacks <name>` check the targets after it, and `||` names a fallback call. The skill's *Routes* section says how to harden a recording.
 
 ## Integrating from an app or a feature package
 
@@ -306,6 +312,15 @@ Task {
 
 On iOS, declare `_inspector._tcp` in the app's `NSBonjourServices` and give an `NSLocalNetworkUsageDescription`. On the Mac, the first browse from the CLI asks once for local network access.
 
+### Built in on iOS
+
+Where UIKit is, `serve()` registers two things of its own, each only when the app has not registered the same path or key:
+
+- **`ui.tap <name>`**, an action: activates the first visible, enabled element in the app's own windows whose accessibility identifier, label or button title is the name, or the segment of a segmented control with that title, as its touch would. A cell is selected through its list's delegate, a navigation bar's back button pops its stack, anything else gets `accessibilityActivate()` and then its control actions. It takes milliseconds, where a gesture through Xcode takes about a second. Nothing visible with the name is `TARGET_NOT_FOUND`, a disabled match `EXPECTATION_FAILED`. A tab bar's buttons switch only on their bar's own touch handling, so they are refused with `TARGET_NOT_FOUND`; tap them at their hit point. UI another process draws (a system dialog, a web page in a view service, a context menu's items) is not in the app's windows; tap it through Xcode.
+- **`ui`**, a state key: `{"hitPoints":{"<label>":[x, y]}}`, the centers of the labelled buttons in the visible tab bars, navigation bars and toolbars in window points, read from UIKit on every state request, so a driver taps a tab without a screen capture.
+
+`inspector tap --target <name>` uses both before it captures the screen ([Commands through Xcode](#commands-through-xcode)).
+
 ## Development
 
 ```sh
@@ -327,6 +342,13 @@ bash .claude/skills/inspector/tests/integrate-remove-test.sh              # abou
 bash .claude/skills/inspector/tests/integrate-remove-test.sh --no-build   # skips the builds
 bash .claude/skills/inspector/tests/logs-test.sh                          # logs.sh against a fake xcrun
 bash .claude/skills/inspector/tests/inspector-sh-test.sh                  # rebuild and signing, through a symlink
+bash .claude/skills/inspector/tests/route-test.sh                         # route.sh against a fake CLI
+```
+
+The UIKit code (`ui.tap`, `ui`) builds only for iOS, so `swift test` on the Mac skips its tests. They run on a simulator through the small package in `ios-tests/`, because the root package's scheme also builds the Mac-only CLI:
+
+```sh
+cd ios-tests && xcodebuild test -scheme ios-tests -destination 'platform=iOS Simulator,id=<udid>'
 ```
 
 ## References

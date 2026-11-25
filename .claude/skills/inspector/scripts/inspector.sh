@@ -54,4 +54,11 @@ fi
 
 # The CLI bounds every call itself: APP_NOT_FOUND after 5 s of discovery, TIMEOUT for an app or
 # Xcode tool that stops answering.
-exec "$binary" "$@"
+# Every call goes to `.inspector/calls.jsonl` when that folder exists, so `route.sh record` can
+# turn a session's calls into a route afterwards.
+log_dir="${INSPECTOR_DIR:-$PWD/.inspector}"
+[[ -d "$log_dir" ]] || exec "$binary" "$@"
+code=0
+"$binary" "$@" || code=$?
+printf '{"at":%s,"args":%s,"exit":%d}\n' "$(date +%s)" "$(json_strings "$@")" "$code" >>"$log_dir/calls.jsonl" || true
+exit "$code"

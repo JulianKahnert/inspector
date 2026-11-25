@@ -1,7 +1,7 @@
 
 # General coding standards
 
-Rules for any change to source code, in any language. Language-specific rules live next to this file: Swift in `swift.md`, Swift Testing in `swift-testing.md`, logging in `logging.md`. The process around a change (diagnose first, TDD loop, verification, commits, PRs) is `jk:builder`'s.
+Rules for any change to source code, in any language. Language-specific rules live next to this file: Swift in `swift.md`, Swift Testing in `swift-testing.md`, logging in `logging.md`.
 
 Four rules outrank everything further down whenever they collide:
 

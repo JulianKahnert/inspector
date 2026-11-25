@@ -62,6 +62,9 @@ When a screenshot later shows something the task needed and this state lacks, ad
 
 ### Registration rules
 
+- **`ui` and `ui.tap` are built in on iOS** (README, *Built in on iOS*): `serve()` registers the
+  in-app tap and the bar buttons' hit points. Do not write your own; one the app registers under
+  the same name wins over the built-in.
 - **Per screen, the state that tells you it's open and loaded**: the rows of a list, a loading
   flag, the selected id. `--until` waits on exactly that.
 - **Per step of the route, one action** that calls the same method a tap calls. A route that

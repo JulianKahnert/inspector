@@ -41,6 +41,8 @@ bash .claude/skills/inspector/tests/logs-test.sh   # the skill's logs.sh against
 bash .claude/skills/inspector/tests/integrate-remove-test.sh  # integrate.sh/remove.sh on throwaway repos; --no-build skips the two real builds
 bash .claude/skills/inspector/tests/inspector-sh-test.sh      # inspector.sh's rebuild and signing, through a symlink
 bash .claude/skills/inspector/tests/screenshot-test.sh        # screenshot.sh's small copies and contact sheet
+bash .claude/skills/inspector/tests/route-test.sh             # route.sh record and play against a fake CLI
+(cd ios-tests && xcodebuild test -scheme ios-tests -destination 'platform=iOS Simulator,id=<udid>')  # InspectorKit's UIKit code (ui.tap, ui)
 ```
 
 Commands through Xcode (`capture`, `end`) need the signed binary: run them through

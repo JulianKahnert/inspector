@@ -26,6 +26,7 @@ struct InspectorCLI: AsyncParsableCommand {
       SwipeCommand.self,
       TypeCommand.self,
       InitCommand.self,
+      SessionCommand.self,
       EndCommand.self,
     ])
 

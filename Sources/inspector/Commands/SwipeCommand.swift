@@ -6,7 +6,10 @@ struct SwipeCommand: InspectorCommand {
   static let configuration = CommandConfiguration(
     commandName: "swipe",
     abstract: "Swipes across the simulator's screen from one point to another.",
-    usage: "inspector swipe [--app <name>] <x1> <y1> <x2> <y2> [<seconds>] [--until <match> [--timeout <seconds>]]",
+    usage: """
+      inspector swipe [--app <name>] <x1> <y1> <x2> <y2> [<seconds>] [--targets] \
+      [--until <match> [--timeout <seconds>]]
+      """,
     discussion: """
       Without --until the answer is the command Xcode ran; with it, the answer is like send's, \
       diffed against the state before the swipe. Needs `.inspector/` with a session; gestures \
@@ -16,6 +19,8 @@ struct SwipeCommand: InspectorCommand {
   @OptionGroup var options: AppOptions
 
   @OptionGroup var condition: UntilOptions
+
+  @OptionGroup var targets: TargetsOption
 
   @Argument(help: "Where the swipe starts and ends, in points.")
   var coordinates: [Double] = []
@@ -33,6 +38,7 @@ struct SwipeCommand: InspectorCommand {
     let gesture = Gesture.swipe(
       from: Point(x: coordinates[0], y: coordinates[1]), to: Point(x: coordinates[2], y: coordinates[3]),
       duration: coordinates.count == 5 ? coordinates[4] : nil)
-    return try await gesture.perform(until: condition.request, app: options.app, in: environment)
+    return try await gesture.perform(
+      until: condition.request, app: options.app, targets: targets.targets, in: environment)
   }
 }
