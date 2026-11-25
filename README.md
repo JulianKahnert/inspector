@@ -208,6 +208,10 @@ $ scripts/inspector.sh type 2100000
 - **The screen lags the state**: the state reports a sheet open as soon as the app decided to present it, while the sheet is still sliding in. A gesture during that animation can be lost (a swipe right after the sheet opened failed every time at 0.2 s, reliably passed after 1 s), so wait about a second after a navigation before a gesture that needs the new screen. A gesture with `--until` shows such a loss as `EXPECTATION_FAILED` instead of a silent miss.
 - **A target** names a control by identifier or label; none is `TARGET_NOT_FOUND`, several at different points `TARGET_AMBIGUOUS`, both with the targets in `detail`. A control with neither, such as an unlabelled text field, is tapped by the coordinates `capture` lists.
 - **Typing** goes to the focused field, after whatever text it holds; Xcode reads `\u{0008}` as backspace and `\u{000A}` as Return.
+- **A target that is still coming**, such as a system dialog, takes `tap --target <name> --find <s>`: it captures again every 300 ms until the target is there, at most that many seconds.
+- **The next screen in the same answer**: `--targets` on a gesture adds the targets on the screen right after it, so the next step needs no `capture`.
+- **Faster answers**: with `INSPECTOR_EARLY=1` a gesture with `--until` answers as soon as the condition held, instead of waiting about 1.4 s for Xcode's own answer; that answer has no `targets`.
+- **The session while the app launches**: `inspector session` starts a new Xcode session on the simulator in `config.json` without asking the app, so it can run in parallel with the launch; every other call into the session waits for it.
 
 A refused binary ends in `NOT_APPROVED`, an ended session whose app is gone in `NO_SESSION`, a capture without a hierarchy in `NO_HIERARCHY`; [ADR 004](docs/adr/004-cli.md#commands-through-xcode) has every code, the steps of `init` and the session restart.
 
@@ -242,6 +246,8 @@ Its `scripts/inspector.sh` follows the link back to this checkout, builds the CL
    ```
 
    If the screenshot showed something the task needed, add it to that screen's registered state, so the next run reads it as JSON instead.
+
+6. **Replay a known way as a route.** `scripts/inspector.sh` logs every call to `.inspector/calls.jsonl`. After a run that reached the screen, `scripts/route.sh record > .inspector/routes/<name>.route` turns the log into a route, one call per line; `scripts/route.sh play <route>` plays it without a turn between the steps and stops at the first line that does not pass. Before a line, `@retry <s>` repeats it until it passes, `@has <name>` and `@lacks <name>` check the targets after it, and `||` names a fallback call. The skill's *Routes* section says how to harden a recording.
 
 ## Integrating from an app or a feature package
 

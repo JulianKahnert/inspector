@@ -30,11 +30,17 @@ before the app.
 | `wait <match> [--timeout s]` | The whole state document, once it contains the match |
 | `init [--warm] [--reset] [--workspace path] [--udid udid]` | `{"config","hello","state"}`: builds, installs and starts the app through Xcode, writes `.inspector/config.json` and reads the first observation (see *Init* below) |
 | `capture` | `{"screenshot","screenshotFull"?,"hierarchy","targets"}`: captures the simulator's screen in the session in `.inspector/config.json`. `targets` lists the controls as `{type, identifier?, label?, placeholder?, value?, hitPoint: [x, y]}`; `value` holds a field's typed text. `screenshot` is at most 1000 pixels on its longest edge; `screenshotFull`, the original it was scaled from, is for a human. Find a tap point with `jq '.targets[] \| select(.label == "Sichern")'` |
-| `tap <x> <y>`, `tap --target <name>` | `{"gesture","target"?}`: taps a point, or the `hitPoint` of the one target whose identifier or label is the name (`TARGET_NOT_FOUND` / `TARGET_AMBIGUOUS` list the targets in `detail`). Simulator only |
+| `tap <x> <y>`, `tap --target <name> [--find s]` | `{"gesture","target"?}`: taps a point, or the `hitPoint` of the one target whose identifier or label is the name (`TARGET_NOT_FOUND` / `TARGET_AMBIGUOUS` list the targets in `detail`). `--find <s>` captures again every 300 ms while the target is missing, up to that many seconds, so a system dialog needs no sleep. Simulator only |
 | `swipe <x1> <y1> <x2> <y2> [s]` | `{"gesture"}`: drags from one point to the other. Simulator only |
 | `type <text>` | `{"gesture"}`: types into the focused field, after its text; `${NAME}` comes from `.inspector/.env`, `\u{0008}` is backspace. Simulator only |
-| `tap`, `swipe`, `type` … `--until <match> [--timeout s]` | Like `send --until`: the diff against the state before the gesture. Wait about 1 s after opening a sheet before a gesture on it; one during the slide-in animation is lost |
+| `tap`, `swipe`, `type` … `--until <match> [--timeout s]` | Like `send --until`: the diff against the state before the gesture. The gesture answers only after Xcode captured the screen again, so a gesture chained after it finds the new screen settled; only a gesture right after a `send` that opens a sheet can land in its slide-in and get lost (give that `send` an `--until` on the sheet) |
+| `tap`, `swipe`, `type` … `--targets` | The same answer plus `targets`, the controls on the screen right after the gesture (as in `capture`), so the next step needs no `capture`. Missing when the early answer fired |
+| `session` | `{"session","startedMs"}`: starts a new Xcode session on the `udid` in `.inspector/config.json` without asking the app, and writes it to `config.json`; run it while the app launches. Holds `.inspector/session.lock` meanwhile; every other call into the session waits for it |
 | `end` | `{"session","xcode"}`: ends the Xcode session in `.inspector/config.json`; the app that session started ends with it. `xcode` is Xcode's answer, `{"userMessage":"Session doesn't exist anymore"}` for a session that already ended |
+
+## Early answer (experimental)
+
+`INSPECTOR_EARLY=1` makes a gesture with `--until` answer as soon as the condition held, at least `INSPECTOR_EARLY_MIN_MS` (350 by default) after the gesture went to Xcode, instead of after Xcode's own answer about 1.4 s after the touch. The answer then has no `targets` and `run.json` no `lastScreenshot`/`lastHierarchy` of that gesture. An Xcode error that comes first still wins.
 
 ## Init
 
@@ -175,3 +181,23 @@ Xcode session, so it also works after `simctl launch`.
 **Alternative: `GetConsoleOutput`** from Xcode's MCP tools, with `oslogSeverity`, a regex
 `pattern` and `tailLimit`. Use it only in two cases: the Xcode launch session that started the app
 is still alive, or the app runs on a physical device, where `simctl` can't reach.
+
+## `scripts/route.sh`
+
+Records a known way through the app and plays it back without a turn between the steps.
+
+- **Call log**: `scripts/inspector.sh` appends every call to `.inspector/calls.jsonl`
+  (`{"at","args","exit"}`) when the folder exists (`INSPECTOR_DIR` included).
+- **`record [<calls.jsonl>]`**: the route on stdout, one call per line, from the calls that changed
+  the app and passed: `tap`, `swipe`, `type`, `send`, `wait`. Reads, failed calls, calls with
+  `"caller":"harness"` and `--targets` are left out.
+- **Route lines**: written as for `scripts/inspector.sh`, shell quoting included; `#` starts a
+  comment. Options before the call: `@retry <s>` repeats it until it passes, at most `<s>` seconds;
+  `@has <name>` passes only when the targets after it have the name as label or identifier,
+  `@lacks <name>` only when they no longer have it (both add `--targets` to a gesture).
+  `a || b`: `b` runs when `a` fails.
+- **`play <route> [--from n] [--to n]`**: runs the lines in order with `INSPECTOR_EARLY=1` unless
+  set, prints each line's time to stderr and the last answer to stdout. The first line that does
+  not pass ends it with exit 1, its number, the line and the last error on stderr. `--from`/`--to`
+  play a part, 1-based and inclusive. `INSPECTOR` replaces the CLI it calls. A usage error exits
+  with 64.
