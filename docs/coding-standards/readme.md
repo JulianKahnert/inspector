@@ -3,7 +3,6 @@
 
 The shared coding standards for Julian's private repos: what the code looks like, the rules a reviewer can check in a diff. Each repo carries a copy of these files in `docs/coding-standards/` and links them from its `CODING_STANDARDS.md`, followed by the repo's own rules. This folder is the only place they are edited; the copies are regenerated from it.
 
-How to work on a change (diagnose first, the TDD loop, verification, commits, PRs) is not here: that is the `jk:builder` skill.
 
 | File | Covers | Read when |
 |---|---|---|

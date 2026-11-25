@@ -1,7 +1,7 @@
 
 # Logging
 
-How to log so the output stays aggregatable, filterable, and free of secrets. For *temporary* instrumentation during a bug hunt, use `jk:builder`'s `references/debug-logging.md` instead — different rules apply there.
+How to log so the output stays aggregatable, filterable, and free of secrets. For *temporary* instrumentation during a bug hunt, use a temporary probe instead — different rules apply there.
 
 ## The rule in short
 
@@ -75,5 +75,5 @@ logger.error("Failed to load readings: \(error.localizedDescription, privacy: .p
 
 - No secrets, tokens, passwords, or auth headers — not even at `debug`.
 - No personal data beyond an opaque identifier; log the user ID, not the email or name.
-- Nothing inside a hot loop or a SwiftUI `body` — that is a probe (`jk:builder`'s `references/debug-logging.md`), not a log.
+- Nothing inside a hot loop or a SwiftUI `body` — that is a probe, not a log.
 - No log line that only restates the previous one. One line per meaningful decision or boundary crossing, not one per statement.
