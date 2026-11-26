@@ -247,7 +247,7 @@ Its `scripts/inspector.sh` follows the link back to this checkout, builds the CL
 
    If the screenshot showed something the task needed, add it to that screen's registered state, so the next run reads it as JSON instead.
 
-6. **Replay a known way as a route.** `scripts/inspector.sh` logs every call to `.inspector/calls.jsonl`. After a run that reached the screen, `scripts/route.sh record > .inspector/routes/<name>.route` turns the log into a route, one call per line; `scripts/route.sh play <route>` plays it without a turn between the steps and stops at the first line that does not pass. Before a line, `@retry <s>` repeats it until it passes, `@has <name>` and `@lacks <name>` check the targets after it, and `||` names a fallback call. The skill's *Routes* section says how to harden a recording.
+6. **Replay a known way as a route.** `scripts/inspector.sh` logs every call to `.inspector/calls.jsonl`. After a run that reached the screen, `scripts/route.sh record --save <name>` turns the log into a route, one call per line, saved in the routes folder (an ephemeral integration's store, so `remove.sh` keeps it; else `.inspector/routes/`); `scripts/route.sh list` shows the saved ones and `scripts/route.sh play <name>` plays one without a turn between the steps and stops at the first line that does not pass. Before a line, `@retry <s>` repeats it until it passes, `@has <name>` and `@lacks <name>` check the targets after it, and `||` names a fallback call. The skill's *Routes* section says how to harden a recording.
 
 ## Integrating from an app or a feature package
 

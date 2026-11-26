@@ -3,13 +3,20 @@
 # between: a known way to a screen (sign-in, a menu, a sheet) costs one call instead of one turn
 # per step.
 #
-# Usage: route.sh record [<calls.jsonl>]   the route as text on stdout
-#        route.sh play <route> [--from <n>] [--to <n>]
+# Usage: route.sh list                                      the saved routes, one name per line
+#        route.sh record [<calls.jsonl>] [--save <name>]  the route as text on stdout, or saved
+#        route.sh play <name|file> [--from <n>] [--to <n>]
+#
+# Routes are saved as <name>.route in the routes folder: for an ephemeral integration the store's
+# `routes/` next to its DebugInspector.swift (integrate.sh records the store, so remove.sh never
+# deletes them and the next workspace has them), otherwise `.inspector/routes/`. INSPECTOR_ROUTES
+# overrides it. Name a route after the screen it ends on.
 #
 # record reads the call log `scripts/inspector.sh` writes to `.inspector/calls.jsonl` (or the one
 # given) and keeps every call that changed the app and succeeded: tap, swipe, type, send, wait.
 # Reads (state, capture, catalog, init, …), failed calls and `--targets` are left out. The result
-# is a draft: harden it once (SKILL.md, *Routes*) before you rely on it.
+# is a draft: harden it once (SKILL.md, *Routes*) before you rely on it. --save writes it to the
+# routes folder as <name>.route (never over an existing one) and prints its path.
 #
 # A route is text, one call per line, written as you would pass it to `scripts/inspector.sh`;
 # `#` starts a comment. Words before the call that start with `@` tell play how to run it:
@@ -30,20 +37,76 @@ emulate -L zsh
 setopt pipefail no_unset extended_glob
 zmodload zsh/datetime zsh/mathfunc
 
-usage="usage: ${0:t} record [<calls.jsonl>] | play <route> [--from <n>] [--to <n>]"
+usage="usage: ${0:t} list | record [<calls.jsonl>] [--save <name>] | play <name|file> [--from <n>] [--to <n>]"
 die() { print -u2 -- "$*"; exit 64 }
 
 scripts=${0:A:h}
 log_dir=${INSPECTOR_DIR:-$PWD/.inspector}
 
+# The routes folder: INSPECTOR_ROUTES, else the store an ephemeral integration came from (its
+# record's `store` line; an older record without one: the store's default folder for this
+# repository), else .inspector/routes.
+routes_dir() {
+  if [[ -n ${INSPECTOR_ROUTES:-} ]]; then print -r -- $INSPECTOR_ROUTES; return; fi
+  local record=$log_dir/integration/record store="" common
+  if [[ -f $record ]]; then
+    store=$(awk -F'\t' '$1 == "store" { print $2; exit }' $record)
+    if [[ -z $store ]] && common=$(git -C ${log_dir:h} rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
+      store=${INSPECTOR_STORE:-$HOME/.claude/inspector/integrations}/${common:h:t}
+      [[ -d $store ]] || store=""
+    fi
+  fi
+  if [[ -n $store ]]; then print -r -- $store/routes; else print -r -- $log_dir/routes; fi
+}
+
+# resolve <name|file>: the route file; a bare name is looked up in the routes folder.
+resolve() {
+  local dir=$(routes_dir)
+  if [[ -f $1 ]]; then print -r -- $1
+  elif [[ -f $dir/$1.route ]]; then print -r -- $dir/$1.route
+  elif [[ -f $dir/$1 ]]; then print -r -- $dir/$1
+  else print -u2 -- "no route \`$1\` in $dir; \`${0:t} list\` shows the saved ones"; exit 1
+  fi
+}
+
+list() {
+  local dir=$(routes_dir) f
+  print -r -- "# $dir"
+  for f in $dir/*.route(N); do
+    print -r -- "${f:t:r}	$(grep -cv '^[[:space:]]*\(#.*\)\{0,1\}$' $f) steps"
+  done
+}
+
 record() {
-  local file=${1:-$log_dir/calls.jsonl}
+  local file="" name=""
+  while (( $# )); do
+    case $1 in
+      --save) (( $# >= 2 )) || die $usage; name=$2; shift 2 ;;
+      -*) die $usage ;;
+      *) file=$1; shift ;;
+    esac
+  done
+  file=${file:-$log_dir/calls.jsonl}
   [[ -r $file ]] || die "no call log at $file"
-  print "# recorded $(date '+%Y-%m-%d %H:%M') from $file"
+  if [[ -n $name ]]; then
+    [[ $name != */* ]] || die "a route name has no /: $name"
+    local dir=$(routes_dir)
+    local target=$dir/$name.route
+    [[ ! -e $target ]] || { print -u2 -- "a route \`$name\` exists at $target; pick another name or edit it"; exit 1 }
+    mkdir -p $dir
+    draft $file >$target
+    print -r -- $target
+  else
+    draft $file
+  fi
+}
+
+draft() {
+  print "# recorded $(date '+%Y-%m-%d %H:%M') from $1"
   jq -r 'select(.exit == 0 and (.caller // "") != "harness")
          | select(.args[0] | IN("tap", "swipe", "type", "send", "wait"))
          | .args | map(select(. != "--targets"))
-         | map(if test("^[A-Za-z0-9._:/@=+-]+$") then . else @sh end) | join(" ")' "$file"
+         | map(if test("^[A-Za-z0-9._:/@=+-]+$") then . else @sh end) | join(" ")' "$1"
 }
 
 # Sets $answer and $error of one call, its words in $@; returns its exit code.
@@ -62,8 +125,9 @@ targets_have() {
 }
 
 play() {
-  local route=$1; shift
-  [[ -r $route ]] || die "no route at $route"
+  local route
+  route=$(resolve $1) || exit 1
+  shift
   local from=1 to=0
   while (( $# )); do
     case $1 in
@@ -130,6 +194,7 @@ play() {
 }
 
 case ${1:-} in
+  list) list ;;
   record) shift; record "$@" ;;
   play) shift; (( $# )) || die $usage; play "$@" ;;
   *) die $usage ;;

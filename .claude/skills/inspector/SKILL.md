@@ -26,6 +26,11 @@ Xcode keeps its approval, and passes the arguments through.
   has. Its answer is `{"settled","state","diff"}`; read the `diff`. A step that waits for the
   network (sign-in, a first sync, an upload) adds `--timeout 90`: the default is 3 s.
 - **Turns are the cost, not calls.** Each of your turns costs 2–5 s, a call 0.1–2 s.
+- **A way you took once is never explored again.** Before you navigate, run
+  `scripts/route.sh list`: a route that ends where you need to be is played with
+  `scripts/route.sh play <name>`; where it stops, continue by hand from that line. A way you found
+  by hand ends with `scripts/route.sh record --save <name>`, hardened and named after where it
+  ends, even if you think you won't need it again (*Routes*).
 - **Write the whole route as code, then read only where it stopped.** After `init`, write every
   step of the task as one `&&` chain in a single Bash call, also across screens: names from the
   task are your targets, not something to look up first. Each step carries its `--until`; a
@@ -173,14 +178,15 @@ Every sheet and pushed screen gets a close action. Details, rules and the templa
 
 ## Routes
 
-A way you will take again (a sign-in, the path to the screen you debug) becomes a route: one call
-plays it, where finding it took one turn per step. `scripts/inspector.sh` logs every call to
-`.inspector/calls.jsonl`; after a run that reached the screen, `scripts/route.sh record` writes
-its successful changing calls as a draft route, one call per line. Harden the draft once, then
-`scripts/route.sh play <route> [--from n] [--to n]`; it stops at the first line that fails and
-prints that line and its error, so you continue from there by hand.
+A route is a way to a screen as text, one call per line; one call plays it, where finding it took
+one turn per step. `scripts/inspector.sh` logs every call to `.inspector/calls.jsonl`; after a run
+that reached the screen, `scripts/route.sh record --save <name>` writes its successful changing
+calls as a draft and prints the file. Routes live in the routes folder that `route.sh list` names
+first: for an ephemeral integration the store's `routes/`, so `remove.sh` never takes them and the
+next workspace has them; otherwise `.inspector/routes/`. `scripts/route.sh play <name>
+[--from n] [--to n]` stops at the first line that fails and prints that line and its error.
 
-Harden each line to the fastest call that is still sure:
+Harden the draft once, editing the file, each line to the fastest call that is still sure:
 - an app control: `tap --target <name> --until …`, which activates it inside the app when it can;
 - a control that appears a moment later: `tap --target <name> --find <s>`, never a coordinate;
 - UI another process draws (system dialog, web page): `@retry <s>` with `@has <name>` or
@@ -188,14 +194,14 @@ Harden each line to the fastest call that is still sure:
 - a slow step (network): `wait '<match>' --timeout 90` after it;
 - drop the misses the recording kept (a tap that hit nothing, a scroll too many).
 
-Keep a route beside the integration (`.inspector/routes/`) and name it after where it ends.
+A route that stopped because the app changed is fixed in its file, not worked around by hand.
 
 ## Scripts
 
 - `scripts/inspector.sh [--app name] <command…>`: the CLI, rebuilt when stale and signed
   (`INSPECTOR_REBUILD=1` forces a build).
-- `scripts/route.sh record [<calls.jsonl>]` / `play <route> [--from n] [--to n]`: turns the
-  logged calls into a route and plays one back (*Routes*).
+- `scripts/route.sh list` / `record [<calls.jsonl>] [--save <name>]` / `play <name|file>
+  [--from n] [--to n]`: the saved routes, the logged calls as a route, one played back (*Routes*).
 - `scripts/wait-state.sh '<jq filter>' [seconds]`: polls `state` until the filter yields neither
   `null` nor `false`.
 - `scripts/logs.sh [--all] [--since <seconds>]`: after a failed step, the app's error and fault

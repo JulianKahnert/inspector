@@ -3,7 +3,8 @@
 # remove_integration, shared by remove.sh and by integrate.sh's rollback; sourced after common.sh.
 #
 # integrate.sh leaves a record in .inspector/integration/: `record` holds one tab-separated line
-# per change (`exclude`, `file <path>`, `patch <path> <patch file>`, `resolved <path> <copy>`),
+# per change (`exclude`, `file <path>`, `patch <path> <patch file>`, `resolved <path> <copy>`,
+# `store <dir>`, which only route.sh reads),
 # next to the patches and the copies it names. Reversing a patch undoes exactly what the edit added,
 # also the lines SwiftPM adds without a marker (`dependencies: [`, a comma). Without a record, or
 # when a file changed so its patch no longer applies, the markers are the fallback.

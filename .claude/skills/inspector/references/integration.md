@@ -152,13 +152,16 @@ pull request. Run both without asking.
 ```
 ~/.claude/inspector/integrations/<repo>/<target path>/DebugInspector.swift
 ~/.claude/inspector/integrations/<repo>/<target path>/.env
+~/.claude/inspector/integrations/<repo>/routes/<name>.route
 ```
 
 One folder per repository. Below it, `DebugInspector.swift` sits at the path its target has in the
 repository, so the path says where the file goes and no other file has to: for a SwiftPM app,
 `<repo>/Sources/App/DebugInspector.swift`; for an Xcode app, `<repo>/App/DebugInspector.swift`.
 The `.env` next to it holds `NAME=value` lines for `${NAME}` in `send` payloads; it ends up in
-`.inspector/.env` and never in the repository.
+`.inspector/.env` and never in the repository. `routes/` holds the repository's routes:
+`integrate.sh` records the store in `.inspector/integration/record`, `scripts/route.sh` saves and
+finds routes there, and `remove.sh` never touches them.
 
 The store is committed in the private `~/.claude` repository, in `~/.claude/inspector/`, next to
 `skills/` and not inside it, because `skills/inspector` links to this public repository. Edit the
