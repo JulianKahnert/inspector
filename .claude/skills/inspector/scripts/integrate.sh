@@ -5,7 +5,7 @@
 #   --from <dir>             the repository's folder in the store,
 #                            ~/.claude/inspector/integrations/<repo>; the one DebugInspector.swift
 #                            below it goes to the same path in the repository, its .env to
-#                            .inspector/.env
+#                            .inspector/.env; its routes/ stay there (route.sh finds them)
 #   --into <path>            without a store: copy the skill's template into this target directory
 #   --plist <path>           the Info.plist to add the two keys to (default: <target>/Info.plist)
 #   --package <dir>          add InspectorKit to this local package instead of the manifest above
@@ -252,6 +252,8 @@ fi
 mkdir -p "$state/patches" "$state/copies"
 record="$state/record"
 : >"$record"
+# The store, so route.sh keeps this repository's routes there and remove.sh never touches them.
+[[ -z "$from" ]] || printf 'store\t%s\n' "$store" >>"$record"
 
 # abort <code> <message> [detail]: undo what was done so far, then fail.
 abort() {

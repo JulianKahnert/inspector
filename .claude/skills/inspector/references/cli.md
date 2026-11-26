@@ -189,15 +189,24 @@ Records a known way through the app and plays it back without a turn between the
 
 - **Call log**: `scripts/inspector.sh` appends every call to `.inspector/calls.jsonl`
   (`{"at","args","exit"}`) when the folder exists (`INSPECTOR_DIR` included).
-- **`record [<calls.jsonl>]`**: the route on stdout, one call per line, from the calls that changed
-  the app and passed: `tap`, `swipe`, `type`, `send`, `wait`. Reads, failed calls, calls with
-  `"caller":"harness"` and `--targets` are left out.
+- **Routes folder**: `INSPECTOR_ROUTES` if set; else, in a repository with an ephemeral
+  integration, `routes/` in the store it came from (the `store` line `integrate.sh` writes to
+  `.inspector/integration/record`; an older record without one:
+  `~/.claude/inspector/integrations/<repo>/routes`, `INSPECTOR_STORE` replacing the part before
+  `<repo>`); else `.inspector/routes/`.
+- **`list`**: the folder as a `#` line, then each `<name>.route` as `<name><TAB><n> steps`.
+- **`record [<calls.jsonl>] [--save <name>]`**: the route on stdout, one call per line, from the
+  calls that changed the app and passed: `tap`, `swipe`, `type`, `send`, `wait`. Reads, failed
+  calls, calls with `"caller":"harness"` and `--targets` are left out. `--save` writes it to the
+  routes folder as `<name>.route` instead and prints the path; an existing route is never
+  overwritten (exit 1).
 - **Route lines**: written as for `scripts/inspector.sh`, shell quoting included; `#` starts a
   comment. Options before the call: `@retry <s>` repeats it until it passes, at most `<s>` seconds;
   `@has <name>` passes only when the targets after it have the name as label or identifier,
   `@lacks <name>` only when they no longer have it (both add `--targets` to a gesture).
   `a || b`: `b` runs when `a` fails.
-- **`play <route> [--from n] [--to n]`**: runs the lines in order with `INSPECTOR_EARLY=1` unless
+- **`play <name|file> [--from n] [--to n]`**: a file path, else `<name>.route` in the routes
+  folder (missing: exit 1 naming the folder). Runs the lines in order with `INSPECTOR_EARLY=1` unless
   set, prints each line's time to stderr and the last answer to stdout. The first line that does
   not pass ends it with exit 1, its number, the line and the last error on stderr. `--from`/`--to`
   play a part, 1-based and inclusive. `INSPECTOR` replaces the CLI it calls. A usage error exits

@@ -263,6 +263,24 @@ test_integrate_places_the_store_file_at_the_path_it_has_in_the_store() {
   expect_contains '"target":"App"' "$out"
 }
 
+test_routes_in_the_store_survive_remove_and_are_found_after_the_next_integrate() {
+  make_app "$tmp/app"
+  make_store "$tmp/store/app" Sources/App
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_status 0
+  printf '{"at":1,"args":["tap","--target","Settings"],"exit":0}\n' >"$tmp/app/.inspector/calls.jsonl"
+  local saved
+  saved="$(cd "$tmp/app" && zsh "$scripts/route.sh" record --save settings)" || fail "record --save failed"
+  [[ "$(cd "$(dirname "$saved")" && pwd -P)" == "$(cd "$tmp/store/app/routes" && pwd -P)" ]] || fail "saved to $saved, not the store"
+  run "$scripts/remove.sh" "$tmp/app"
+  expect_status 0
+  expect_clean_tree "$tmp/app"
+  [[ -f "$tmp/store/app/routes/settings.route" ]] || fail "remove.sh took the store's route"
+  run "$scripts/integrate.sh" "$tmp/app" --from "$tmp/store/app"
+  expect_status 0
+  expect_contains $'settings\t1 steps' "$(cd "$tmp/app" && zsh "$scripts/route.sh" list)"
+}
+
 test_integrate_adds_the_dependency_marked() {
   make_app "$tmp/app"
   make_store "$tmp/store/app" Sources/App

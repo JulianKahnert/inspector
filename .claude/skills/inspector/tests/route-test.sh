@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Tests scripts/route.sh against a fake CLI (INSPECTOR): recording a call log, parsing a route
 # (quotes, comments, blank lines), @retry, @has, @lacks, `||` fallbacks, stopping at the first line
-# that does not pass, and --from/--to.
+# that does not pass, --from/--to, and the routes folder (list, record --save, play by name, the
+# store of an ephemeral integration).
 # Usage (from the repo root): bash .claude/skills/inspector/tests/route-test.sh
 # Without `set -e`: a case that fails must not stop the others.
 set -uo pipefail
@@ -96,8 +97,8 @@ check "@has adds --targets and passes when the name is there" \
 play_case $'@has Go tap 1 2' $'tap|1|2|--targets\t0\t{"targets":[{"label":"Back"}]}\n'
 check "@has fails when the name is missing" '[[ $code == 1 ]]'
 
-play_case $'@retry 5 @lacks Fortfahren tap --target Fortfahren' \
-  $'tap|--target|Fortfahren|--targets\t0\t{"targets":[{"identifier":"Fortfahren"}]}\n'
+play_case $'@retry 5 @lacks Continue tap --target Continue' \
+  $'tap|--target|Continue|--targets\t0\t{"targets":[{"identifier":"Continue"}]}\n'
 check "@lacks fails while the name is still there" '[[ $code == 1 ]]'
 
 play_case $'@lacks X tap 1 2' $'tap|1|2|--targets\t0\t{"targets":[{"label":"Y"}]}\n'
@@ -138,6 +139,55 @@ sed 1d <<<"$out" >"$sandbox/recorded"
 play_case "$(cat "$sandbox/recorded")" ''
 check "a recorded route plays back with the same arguments" \
   '[[ $code == 0 && "$(cat "$calls")" == $'"'"'tap|--target|Sign in\ntype|a@b.c\\u{000A}\nwait|{"tabs":{}}|--timeout|9'"'"' ]]'
+
+# The routes folder.
+# run_route <args…>: runs route.sh in $sandbox/repo; sets $out, $err, $code and resets $calls.
+run_route() {
+  : >"$calls"; : >"$RULES"
+  code=0
+  out="$(cd "$sandbox/repo" && zsh "$route_sh" "$@" 2>"$sandbox/err")" || code=$?
+  err="$(cat "$sandbox/err")"
+}
+mkdir -p "$sandbox/repo/.inspector"
+git -C "$sandbox/repo" init -q
+cp "$sandbox/calls.jsonl" "$sandbox/repo/.inspector/calls.jsonl"
+
+run_route record --save home
+check "record --save writes <name>.route to .inspector/routes without an integration" \
+  '[[ $code == 0 && "$out" == */.inspector/routes/home.route && "$(sed 1d "$sandbox/repo/.inspector/routes/home.route")" == "$(cat "$sandbox/expected")" ]]'
+
+run_route record --save home
+check "record --save never overwrites a route" '[[ $code == 1 && "$err" == *"exists"* ]]'
+
+run_route list
+check "list names each saved route with its steps" '[[ $code == 0 && "$out" == *$'"'"'home\t3 steps'"'"'* ]]'
+
+run_route play home
+check "play takes a bare name from the routes folder" \
+  '[[ $code == 0 && "$(cat "$calls")" == $'"'"'tap|--target|Sign in\ntype|a@b.c\\u{000A}\nwait|{"tabs":{}}|--timeout|9'"'"' ]]'
+
+run_route play nowhere
+check "play names the folder when a route is missing" '[[ $code == 1 && "$err" == *"no route \`nowhere\`"*".inspector/routes"* ]]'
+
+# An ephemeral integration: integrate.sh records its store; routes live there, outside the repo.
+mkdir -p "$sandbox/store/App" "$sandbox/repo/.inspector/integration"
+printf 'file\tApp/DebugInspector.swift\nstore\t%s\n' "$sandbox/store" >"$sandbox/repo/.inspector/integration/record"
+run_route record --save settings
+check "with an integration's store, record --save writes into the store's routes" \
+  '[[ $code == 0 && "$out" == "$sandbox/store/routes/settings.route" && -f "$sandbox/store/routes/settings.route" ]]'
+
+run_route list
+check "list shows the store's routes" '[[ "$out" == "# $sandbox/store/routes"* && "$out" == *settings* && "$out" != *home* ]]'
+
+# An older record without a store line: the store's default folder named after the repository.
+printf 'file\tApp/DebugInspector.swift\n' >"$sandbox/repo/.inspector/integration/record"
+mkdir -p "$sandbox/stores/repo/routes"
+printf 'tap 1 1\n' >"$sandbox/stores/repo/routes/old.route"
+INSPECTOR_STORE="$sandbox/stores" run_route play old
+check "an older record falls back to the store folder named after the repository" '[[ $code == 0 && "$(cat "$calls")" == "tap|1|1" ]]'
+
+INSPECTOR_ROUTES="$sandbox/elsewhere" run_route list
+check "INSPECTOR_ROUTES overrides the folder" '[[ "$out" == "# $sandbox/elsewhere" ]]'
 
 echo "$((cases - failures)) of $cases passed"
 (( failures == 0 ))
